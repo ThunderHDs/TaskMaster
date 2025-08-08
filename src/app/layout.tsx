@@ -23,7 +23,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={cn('font-body antialiased h-full bg-background')}>
+      <body
+        className={cn('font-body antialiased h-full bg-background')}
+        suppressHydrationWarning
+      >
         {children}
         <Toaster />
       </body>
