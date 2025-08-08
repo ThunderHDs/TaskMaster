@@ -266,7 +266,7 @@ export default function TaskPage() {
     });
   }, []);
 
-  const handleToggleComplete = useCallback((id: string, completed: boolean) => {
+  const handleToggleComplete = useCallback((id: string, completed: boolean, title: string) => {
     const logContent = completed ? 'Task marked as complete.' : 'Task marked as incomplete.';
     const newActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: logContent, timestamp: new Date(), taskId: id };
 
@@ -337,14 +337,18 @@ export default function TaskPage() {
     };
 
     setTasks(currentTasks => {
-        const tasksWithToggledItem = updateTasks(currentTasks, id, completed);
-        const tasksWithParentUpdates = updateParents(tasksWithToggledItem, currentTasks);
+        let tasksWithToggledItem = updateTasks(currentTasks, id, completed);
+        tasksWithToggledItem = updateParents(tasksWithToggledItem, currentTasks);
         
-        const parentId = findParentId(tasksWithParentUpdates, id);
+        const parentId = findParentId(tasksWithToggledItem, id);
         if (parentId) {
-            return addActivityToParent(tasksWithParentUpdates, parentId, newActivity);
+            const parentLogContent = completed 
+                ? `Subtask '${title}' marked as complete.` 
+                : `Subtask '${title}' marked as incomplete.`;
+            const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: id };
+            return addActivityToParent(tasksWithToggledItem, parentId, parentNewActivity);
         }
-        return tasksWithParentUpdates;
+        return tasksWithToggledItem;
     });
   }, []);
 
@@ -571,52 +575,48 @@ export default function TaskPage() {
                                     <ScrollArea className="h-40">
                                       <div className="space-y-1 pr-2">
                                           {tags.map(tag => (
-                                              <div
-                                                  key={tag.id}
-                                                  className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
-                                              >
-                                                  <div className="flex items-center gap-2 flex-grow">
-                                                      <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
-                                                      <span className="text-sm">{tag.label}</span>
-                                                  </div>
-                                                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                      <Button
-                                                          variant="ghost"
-                                                          size="icon"
-                                                          className="h-6 w-6"
-                                                          onClick={(e) => {
-                                                              e.stopPropagation();
-                                                              setEditingTag({ ...tag });
-                                                          }}
-                                                      >
-                                                          <Edit className="h-4 w-4" />
-                                                      </Button>
-                                                      <AlertDialog>
-                                                          <AlertDialogTrigger asChild>
-                                                              <Button
-                                                                  variant="ghost"
-                                                                  size="icon"
-                                                                  className="h-6 w-6 text-destructive hover:text-destructive"
-                                                                  onClick={(e) => e.stopPropagation()}
-                                                              >
-                                                                  <X className="h-4 w-4" />
-                                                              </Button>
-                                                          </AlertDialogTrigger>
-                                                          <AlertDialogContent>
-                                                              <AlertDialogHeader>
-                                                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                  <AlertDialogDescription>
-                                                                      This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
-                                                                  </AlertDialogDescription>
-                                                              </AlertDialogHeader>
-                                                              <AlertDialogFooter>
-                                                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                  <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
-                                                              </AlertDialogFooter>
-                                                          </AlertDialogContent>
-                                                      </AlertDialog>
-                                                  </div>
-                                              </div>
+                                            <div
+                                                key={tag.id}
+                                                className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
+                                            >
+                                                <div className="flex items-center gap-2 flex-grow">
+                                                    <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
+                                                    <span className="text-sm">{tag.label}</span>
+                                                </div>
+                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6"
+                                                        onClick={() => setEditingTag({ ...tag })}
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                                            >
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
+                                            </div>
                                           ))}
                                       </div>
                                     </ScrollArea>
@@ -642,7 +642,7 @@ export default function TaskPage() {
                   onAddSubtask={handleAddSubtask}
                   onAddComment={handleAddComment}
                   onToggleActivity={handleToggleActivity}
-                  isActivityOpen={openActivityTaskId === task.id}
+                  openActivityTaskId={openActivityTaskId}
                   level={0}
                 />
               ))}
@@ -691,7 +691,9 @@ export default function TaskPage() {
                                 value={editingTag.color} 
                                 onChange={(e) => {
                                     const newColor = e.target.value;
-                                    setEditingTag({...editingTag, color: newColor});
+                                    if (/^#[0-9A-F]{6}$/i.test(newColor)) {
+                                      setEditingTag({...editingTag, color: newColor});
+                                    }
                                  }}
                                 className="flex-1"
                             />

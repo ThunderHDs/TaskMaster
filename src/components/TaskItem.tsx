@@ -52,12 +52,12 @@ type TaskItemProps = {
   task: Task;
   allTags: Tag[];
   onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>, activityLog?: string) => void;
-  onToggleComplete: (id: string, completed: boolean) => void;
+  onToggleComplete: (id: string, completed: boolean, title: string) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => void;
   onAddComment: (taskId: string, comment: string) => void;
   onToggleActivity: (taskId: string) => void;
-  isActivityOpen: boolean;
+  openActivityTaskId: string | null;
   parentTask?: Task;
   level?: number;
 };
@@ -71,7 +71,7 @@ export function TaskItem({
   onAddSubtask,
   onAddComment,
   onToggleActivity,
-  isActivityOpen,
+  openActivityTaskId,
   parentTask,
   level = 0,
 }: TaskItemProps) {
@@ -107,12 +107,17 @@ export function TaskItem({
   };
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+    let finalRange = range;
+    if (range?.to && !range.from) {
+      finalRange = { from: new Date(), to: range.to };
+    }
+
     if (target === 'task') {
-        handleDateChange(range, target);
-        setEditedTask({ ...editedTask, dateRange: range });
+        handleDateChange(finalRange, target);
+        setEditedTask({ ...editedTask, dateRange: finalRange });
     } else {
-        handleDateChange(range, target);
-        setNewSubtaskDateRange(range);
+        handleDateChange(finalRange, target);
+        setNewSubtaskDateRange(finalRange);
     }
   };
 
@@ -180,7 +185,6 @@ export function TaskItem({
     }
   
     setShowDateWarning(false);
-    setNewDateRange(undefined);
   };
 
   const cancelDateChange = () => {
@@ -351,7 +355,7 @@ export function TaskItem({
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
-     <Collapsible open={isActivityOpen} onOpenChange={() => onToggleActivity(task.id)}>
+     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => onToggleActivity(task.id)}>
       <div className="p-3 sm:p-4 flex flex-col gap-2">
         {isEditing ? (
           <div className="flex flex-col gap-3">
@@ -453,7 +457,7 @@ export function TaskItem({
             <Checkbox
               id={`task-${task.id}`}
               checked={task.completed}
-              onCheckedChange={checked => onToggleComplete(task.id, !!checked)}
+              onCheckedChange={checked => onToggleComplete(task.id, !!checked, task.title)}
               className="mt-1"
               aria-labelledby={`task-label-${task.id}`}
             />
@@ -570,7 +574,7 @@ export function TaskItem({
                     onAddSubtask={onAddSubtask}
                     onAddComment={onAddComment}
                     onToggleActivity={onToggleActivity}
-                    isActivityOpen={isActivityOpen}
+                    openActivityTaskId={openActivityTaskId}
                     parentTask={task}
                     level={level + 1}
                   />
@@ -770,7 +774,12 @@ export function TaskItem({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDateChange}>Update Parent</AlertDialogAction>
+            <AlertDialogAction onClick={() => {
+              confirmDateChange();
+              if (dateChangeTarget === 'task') {
+                setIsDatePickerOpen(true);
+              }
+            }}>Update Parent</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
