@@ -41,6 +41,7 @@ type TaskItemProps = {
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>) => void;
   parentTask?: Task;
+  level?: number;
 };
 
 export function TaskItem({
@@ -51,6 +52,7 @@ export function TaskItem({
   onDelete,
   onAddSubtask,
   parentTask,
+  level = 0
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
@@ -71,17 +73,24 @@ export function TaskItem({
   const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
   const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
 
-
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     setDateChangeTarget(target);
-    if (!parentTask || !range) {
-      if(target === 'task') setEditedTask({ ...editedTask, dateRange: range });
-      else setNewSubtaskDateRange(range)
+    
+    // For new subtasks, the parent is the current task.
+    // For editing existing tasks/subtasks, the parent is the one passed in `parentTask`.
+    const relevantParent = target === 'subtask' ? task : parentTask;
+
+    if (!relevantParent || !range) {
+      if (target === 'task') {
+        setEditedTask({ ...editedTask, dateRange: range });
+      } else {
+        setNewSubtaskDateRange(range);
+      }
       return;
     }
 
-    const parentFrom = parentTask.dateRange?.from ? startOfDay(new Date(parentTask.dateRange.from)) : null;
-    const parentTo = parentTask.dateRange?.to ? startOfDay(new Date(parentTask.dateRange.to)) : null;
+    const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
+    const parentTo = relevantParent.dateRange?.to ? startOfDay(new Date(relevantParent.dateRange.to)) : null;
     const rangeFrom = range.from ? startOfDay(new Date(range.from)) : null;
     const rangeTo = range.to ? startOfDay(new Date(range.to)) : null;
 
@@ -94,14 +103,19 @@ export function TaskItem({
       setDateWarningType('end');
       setShowDateWarning(true);
     } else {
-      if(target === 'task') setEditedTask({ ...editedTask, dateRange: range });
-      else setNewSubtaskDateRange(range)
+      if (target === 'task') {
+        setEditedTask({ ...editedTask, dateRange: range });
+      } else {
+        setNewSubtaskDateRange(range);
+      }
     }
   };
   
   const confirmDateChange = () => {
-    if (newDateRange && parentTask && dateWarningType) {
-        const parentUpdate: Partial<Task> = { dateRange: { ...parentTask.dateRange } };
+    const relevantParent = dateChangeTarget === 'subtask' ? task : parentTask;
+
+    if (newDateRange && relevantParent && dateWarningType) {
+        const parentUpdate: Partial<Task> = { dateRange: { from: relevantParent.dateRange?.from, to: relevantParent.dateRange?.to } };
 
         if (dateWarningType === 'start' && newDateRange.from) {
             parentUpdate.dateRange!.from = newDateRange.from;
@@ -109,9 +123,9 @@ export function TaskItem({
             parentUpdate.dateRange!.to = newDateRange.to;
         }
 
-        onUpdate(parentTask.id, parentUpdate);
+        onUpdate(relevantParent.id, parentUpdate);
         
-        if(dateChangeTarget === 'task') {
+        if (dateChangeTarget === 'task') {
             setEditedTask({ ...editedTask, dateRange: newDateRange });
         } else if (dateChangeTarget === 'subtask') {
             setNewSubtaskDateRange(newDateRange);
@@ -220,6 +234,7 @@ export function TaskItem({
   
   const dueDateString = getDueDateString();
   const isOverdue = task.dateRange?.to ? new Date() > new Date(task.dateRange.to) && !task.completed : false;
+  const maxNestingLevel = 2;
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
@@ -391,7 +406,7 @@ export function TaskItem({
           </div>
         )}
 
-        {task.subtasks && (
+        {task.subtasks && level < maxNestingLevel && (
           <div className="pl-8 pt-2 space-y-2">
             {task.subtasks.length > 0 && (
               <button
@@ -421,6 +436,7 @@ export function TaskItem({
                     onDelete={onDelete}
                     onAddSubtask={onAddSubtask}
                     parentTask={task}
+                    level={level + 1}
                   />
                 ))}
 

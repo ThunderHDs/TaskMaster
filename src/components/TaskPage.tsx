@@ -419,6 +419,7 @@ export default function TaskPage() {
                   onToggleComplete={handleToggleComplete}
                   onDelete={handleDelete}
                   onAddSubtask={handleAddSubtask}
+                  level={0}
                 />
               ))}
               {filteredAndSortedTasks.length === 0 && (
