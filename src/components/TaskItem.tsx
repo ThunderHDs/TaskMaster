@@ -110,15 +110,13 @@ export function TaskItem({
     }
   };
 
-  const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
-    let finalRange = range;
-    
-    if (target === 'task') {
-        handleDateChange(finalRange, target);
-    } else {
-        handleDateChange(finalRange, target);
-    }
+  const handleDateSelection = (range: DateRange | undefined) => {
+    handleDateChange(range, 'task');
   };
+
+  const handleSubtaskDateSelection = (range: DateRange | undefined) => {
+    handleDateChange(range, 'subtask');
+  }
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     setDateChangeTarget(target);
@@ -235,8 +233,6 @@ export function TaskItem({
         finalDateRange.from = new Date();
       }
 
-      const parentUpdate = dateChangeTarget === 'subtask' ? stagedParentUpdate : null;
-
       onAddSubtask(task.id, {
         title: newSubtaskTitle.trim(),
         description: newSubtaskDescription.trim() || undefined,
@@ -244,7 +240,7 @@ export function TaskItem({
         tags: newSubtaskTags,
         completed: false,
         activity: []
-      }, parentUpdate ?? undefined);
+      }, stagedParentUpdate ?? undefined);
       resetNewSubtaskForm();
       setIsExpanded(true);
     }
@@ -356,9 +352,7 @@ export function TaskItem({
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
-     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => {
-        if (openActivityTaskId !== task.id) onToggleActivity(task.id);
-     }}>
+     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => onToggleActivity(task.id)}>
       <div className={cn("flex flex-col gap-2", isCompact ? 'p-2' : 'p-3 sm:p-4')}>
         {isEditing ? (
           <div className="flex flex-col gap-3">
@@ -443,7 +437,7 @@ export function TaskItem({
                         }
                       : undefined
                   }
-                  onSelect={range => handleDateSelection(range, 'task')}
+                  onSelect={range => handleDateSelection(range)}
                   numberOfMonths={2}
                 />
               </PopoverContent>
@@ -478,13 +472,14 @@ export function TaskItem({
                   {task.title}
                 </label>
                 <div className={cn("flex items-center flex-shrink-0", isCompact ? 'gap-0' : 'gap-1')}>
-                  {dueDateString && !isCompact && (
+                  {dueDateString && (
                     <span
                       className={cn(
                         'text-xs rounded-full px-2 py-0.5 whitespace-nowrap',
                         isOverdue
                           ? 'bg-destructive/20 text-destructive-foreground'
-                          : 'bg-muted text-muted-foreground'
+                          : 'bg-muted text-muted-foreground',
+                        isCompact ? 'mr-1' : ''
                       )}
                     >
                       {dueDateString}
@@ -522,7 +517,7 @@ export function TaskItem({
                   {task.description}
                 </p>
               )}
-              {taskTags.length > 0 && !isCompact && (
+              {taskTags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {taskTags.map(tag => (
                     <Badge
@@ -641,7 +636,7 @@ export function TaskItem({
                                 mode="range"
                                 defaultMonth={newSubtaskDateRange?.from}
                                 selected={newSubtaskDateRange}
-                                onSelect={range => handleDateSelection(range, 'subtask')}
+                                onSelect={range => handleSubtaskDateSelection(range)}
                                 numberOfMonths={1}
                               />
                             </PopoverContent>
@@ -776,12 +771,10 @@ export function TaskItem({
             <AlertDialogDescription>{getDateWarningDescription()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
               confirmDateChange();
-              if (dateChangeTarget === 'task') {
-                setIsDatePickerOpen(true);
-              }
+              setIsDatePickerOpen(true);
             }}>Update Parent</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
