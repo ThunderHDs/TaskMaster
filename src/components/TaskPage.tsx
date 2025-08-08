@@ -5,7 +5,7 @@ import { Activity, Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Rows, Columns } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -20,6 +20,7 @@ import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 const initialTags: Tag[] = [
   { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
@@ -31,10 +32,12 @@ const initialTags: Tag[] = [
 const icons = [Briefcase, Home, ShoppingBasket];
 
 type FilterType = 'all' | 'done' | 'undone';
+type ViewMode = 'default' | 'compact';
 
 export default function TaskPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('default');
   
   useEffect(() => {
     const now = new Date();
@@ -81,6 +84,11 @@ export default function TaskPage() {
     ];
     setTasks(initialTasksWithDates);
     setTags(initialTags);
+
+    const savedViewMode = localStorage.getItem('task-view-mode') as ViewMode | null;
+    if (savedViewMode) {
+      setViewMode(savedViewMode);
+    }
   }, []);
 
   const [newTagLabel, setNewTagLabel] = useState('');
@@ -270,85 +278,71 @@ export default function TaskPage() {
     const logContent = completed ? 'Task marked as complete.' : 'Task marked as incomplete.';
     const newActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: logContent, timestamp: new Date(), taskId: id };
 
-    let tasksAfterUpdate: Task[] = [];
-
     const toggleChildrenAndLog = (tasks: Task[], parentCompleted: boolean): Task[] => {
-        return tasks.map(task => ({
-            ...task,
-            completed: parentCompleted,
-            activity: [...(task.activity || []), {...newActivity, taskId: task.id}].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-            subtasks: task.subtasks ? toggleChildrenAndLog(task.subtasks, parentCompleted) : [],
-        }));
+      return tasks.map(task => ({
+        ...task,
+        completed: parentCompleted,
+        activity: [...(task.activity || []), { ...newActivity, taskId: task.id }].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+        subtasks: task.subtasks ? toggleChildrenAndLog(task.subtasks, parentCompleted) : [],
+      }));
     };
 
     const updateParents = (tasks: Task[], originalTasks: Task[]): Task[] => {
-        return tasks.map(task => {
-            if (task.subtasks && task.subtasks.length > 0) {
-                const newSubtasks = updateParents(task.subtasks, originalTasks);
-                const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
-                const originalTask = findTaskById(originalTasks, task.id);
+      return tasks.map(task => {
+        if (task.subtasks && task.subtasks.length > 0) {
+          const newSubtasks = updateParents(task.subtasks, originalTasks);
+          const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+          
+          if (task.completed !== allChildrenCompleted) {
+            const parentLogContent = allChildrenCompleted ? 'All subtasks completed, marking parent task as complete.' : 'Subtask marked as incomplete, marking parent task as incomplete.';
+            const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: task.id };
 
-                if (originalTask && originalTask.completed !== allChildrenCompleted) {
-                    const parentLogContent = allChildrenCompleted ? 'All subtasks completed, marking parent task as complete.' : 'Subtask marked as incomplete, marking parent task as incomplete.';
-                    const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: task.id };
-
-                    return { 
-                        ...task, 
-                        subtasks: newSubtasks, 
-                        completed: allChildrenCompleted,
-                        activity: [...(task.activity || []), parentNewActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-                    };
-                }
-                return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
-            }
-            return task;
-        });
-    };
-    
-    const findTaskById = (tasks: Task[], taskId: string): Task | null => {
-        for (const task of tasks) {
-            if (task.id === taskId) return task;
-            if (task.subtasks) {
-                const found = findTaskById(task.subtasks, taskId);
-                if (found) return found;
-            }
+            return {
+              ...task,
+              subtasks: newSubtasks,
+              completed: allChildrenCompleted,
+              activity: [...(task.activity || []), parentNewActivity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+            };
+          }
+          return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
         }
-        return null;
-    }
+        return task;
+      });
+    };
 
     const updateTasks = (tasks: Task[], targetId: string, isCompleted: boolean): Task[] => {
-        return tasks.map(task => {
-            if (task.id === targetId) {
-                const updatedTask = { 
-                  ...task, 
-                  completed: isCompleted,
-                  activity: [...(task.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-                };
-                if (updatedTask.subtasks) {
-                    updatedTask.subtasks = toggleChildrenAndLog(updatedTask.subtasks, isCompleted);
-                }
-                return updatedTask;
-            }
-            if (task.subtasks && task.subtasks.length > 0) {
-                return { ...task, subtasks: updateTasks(task.subtasks, targetId, isCompleted) };
-            }
-            return task;
-        });
+      return tasks.map(task => {
+        if (task.id === targetId) {
+          const updatedTask = {
+            ...task,
+            completed: isCompleted,
+            activity: [...(task.activity || []), newActivity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+          };
+          if (updatedTask.subtasks) {
+            updatedTask.subtasks = toggleChildrenAndLog(updatedTask.subtasks, isCompleted);
+          }
+          return updatedTask;
+        }
+        if (task.subtasks && task.subtasks.length > 0) {
+          return { ...task, subtasks: updateTasks(task.subtasks, targetId, isCompleted) };
+        }
+        return task;
+      });
     };
 
     setTasks(currentTasks => {
-        let tasksWithToggledItem = updateTasks(currentTasks, id, completed);
-        tasksWithToggledItem = updateParents(tasksWithToggledItem, currentTasks);
-        
-        const parentId = findParentId(tasksWithToggledItem, id);
-        if (parentId) {
-            const parentLogContent = completed 
-                ? `Subtask '${title}' marked as complete.` 
-                : `Subtask '${title}' marked as incomplete.`;
-            const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: id };
-            return addActivityToParent(tasksWithToggledItem, parentId, parentNewActivity);
-        }
-        return tasksWithToggledItem;
+      let tasksWithToggledItem = updateTasks(currentTasks, id, completed);
+      let finalTasks = updateParents(tasksWithToggledItem, currentTasks);
+
+      const parentId = findParentId(finalTasks, id);
+      if (parentId) {
+        const parentLogContent = completed
+          ? `Subtask '${title}' marked as complete.`
+          : `Subtask '${title}' marked as incomplete.`;
+        const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: id };
+        return addActivityToParent(finalTasks, parentId, parentNewActivity);
+      }
+      return finalTasks;
     });
   }, []);
 
@@ -429,6 +423,14 @@ export default function TaskPage() {
   
   const handleToggleActivity = (taskId: string) => {
     setOpenActivityTaskId(prevId => (prevId === taskId ? null : taskId));
+  };
+  
+  const toggleViewMode = () => {
+    setViewMode(prevMode => {
+      const newMode = prevMode === 'default' ? 'compact' : 'default';
+      localStorage.setItem('task-view-mode', newMode);
+      return newMode;
+    });
   };
 
 
@@ -546,6 +548,18 @@ export default function TaskPage() {
                     <Button variant={filter === 'undone' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('undone')}><X className="mr-2 h-4 w-4" />Undone</Button>
                 </div>
                 <div className="flex items-center gap-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="icon" onClick={toggleViewMode} className='h-9 w-9'>
+                            {viewMode === 'default' ? <Rows className="h-4 w-4" /> : <Columns className="h-4 w-4" />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Toggle compact view</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <Popover>
                         <PopoverTrigger asChild>
                         <Button variant="outline" size="sm">
@@ -578,6 +592,7 @@ export default function TaskPage() {
                                             <div
                                                 key={tag.id}
                                                 className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
+                                                onClick={(e) => e.stopPropagation()}
                                             >
                                                 <div className="flex items-center gap-2 flex-grow">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
@@ -644,6 +659,7 @@ export default function TaskPage() {
                   onToggleActivity={handleToggleActivity}
                   openActivityTaskId={openActivityTaskId}
                   level={0}
+                  viewMode={viewMode}
                 />
               ))}
               {filteredAndSortedTasks.length === 0 && (
@@ -690,9 +706,11 @@ export default function TaskPage() {
                                 id="tag-color-hex"
                                 value={editingTag.color} 
                                 onChange={(e) => {
-                                    const newColor = e.target.value;
+                                    const newColor = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`;
                                     if (/^#[0-9A-F]{6}$/i.test(newColor)) {
                                       setEditingTag({...editingTag, color: newColor});
+                                    } else {
+                                      setEditingTag({...editingTag, color: e.target.value});
                                     }
                                  }}
                                 className="flex-1"

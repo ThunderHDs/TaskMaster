@@ -48,6 +48,8 @@ import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
+type ViewMode = 'default' | 'compact';
+
 type TaskItemProps = {
   task: Task;
   allTags: Tag[];
@@ -60,6 +62,7 @@ type TaskItemProps = {
   openActivityTaskId: string | null;
   parentTask?: Task;
   level?: number;
+  viewMode?: ViewMode;
 };
 
 export function TaskItem({
@@ -74,6 +77,7 @@ export function TaskItem({
   openActivityTaskId,
   parentTask,
   level = 0,
+  viewMode = 'default',
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
@@ -108,16 +112,11 @@ export function TaskItem({
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     let finalRange = range;
-    if (range?.to && !range.from) {
-      finalRange = { from: new Date(), to: range.to };
-    }
-
+    
     if (target === 'task') {
         handleDateChange(finalRange, target);
-        setEditedTask({ ...editedTask, dateRange: finalRange });
     } else {
         handleDateChange(finalRange, target);
-        setNewSubtaskDateRange(finalRange);
     }
   };
 
@@ -353,10 +352,14 @@ export function TaskItem({
     return '';
   };
 
+  const isCompact = viewMode === 'compact' && level === 0;
+
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
-     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => onToggleActivity(task.id)}>
-      <div className="p-3 sm:p-4 flex flex-col gap-2">
+     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => {
+        if (openActivityTaskId !== task.id) onToggleActivity(task.id);
+     }}>
+      <div className={cn("flex flex-col gap-2", isCompact ? 'p-2' : 'p-3 sm:p-4')}>
         {isEditing ? (
           <div className="flex flex-col gap-3">
             <Input
@@ -474,8 +477,8 @@ export function TaskItem({
                 >
                   {task.title}
                 </label>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {dueDateString && (
+                <div className={cn("flex items-center flex-shrink-0", isCompact ? 'gap-0' : 'gap-1')}>
+                  {dueDateString && !isCompact && (
                     <span
                       className={cn(
                         'text-xs rounded-full px-2 py-0.5 whitespace-nowrap',
@@ -488,11 +491,11 @@ export function TaskItem({
                     </span>
                   )}
                    <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleActivity(task.id)}>
                       <History className="h-4 w-4" />
                     </Button>
                   </CollapsibleTrigger>
-                  <TaskIcon className="h-4 w-4 text-muted-foreground" />
+                  {!isCompact && <TaskIcon className="h-4 w-4 text-muted-foreground" />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -511,7 +514,7 @@ export function TaskItem({
                   </DropdownMenu>
                 </div>
               </div>
-              {task.description && (
+              {task.description && !isCompact && (
                 <p
                   className="text-sm text-muted-foreground mt-1 cursor-pointer"
                   onClick={() => !isEditing && setIsEditing(true)}
@@ -519,7 +522,7 @@ export function TaskItem({
                   {task.description}
                 </p>
               )}
-              {taskTags.length > 0 && (
+              {taskTags.length > 0 && !isCompact && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {taskTags.map(tag => (
                     <Badge
@@ -534,7 +537,7 @@ export function TaskItem({
                 </div>
               )}
               {task.subtasks && task.subtasks.length > 0 && (
-                <div className="flex items-center gap-2 mt-2">
+                <div className={cn("flex items-center gap-2", isCompact ? 'mt-1' : 'mt-2')}>
                   <Progress value={progress} className="h-2 w-full" />
                   <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>
                 </div>
@@ -543,7 +546,7 @@ export function TaskItem({
           </div>
         )}
 
-        {task.subtasks && level < maxNestingLevel && (
+        {task.subtasks && level < maxNestingLevel && !isCompact && (
           <div className="pl-8 pt-2 space-y-2">
             {task.subtasks.length > 0 && (
               <button
