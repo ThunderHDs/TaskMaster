@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { CalendarView } from './CalendarView';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from './ui/command';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from './ui/calendar';
 import { format } from 'date-fns';
@@ -20,6 +20,7 @@ import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { Label } from './ui/label';
+import { ScrollArea } from './ui/scroll-area';
 
 const initialTags: Tag[] = [
   { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
@@ -81,6 +82,7 @@ export default function TaskPage() {
   }, []);
 
   const [newTagLabel, setNewTagLabel] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
@@ -280,6 +282,11 @@ export default function TaskPage() {
     );
   };
 
+  const filteredTags = useMemo(() => {
+    if (!tagFilter) return tags;
+    return tags.filter(tag => tag.label.toLowerCase().includes(tagFilter.toLowerCase()));
+  }, [tags, tagFilter]);
+
   return (
     <div className="w-full">
       <Header />
@@ -417,29 +424,30 @@ export default function TaskPage() {
                                     <Button onClick={handleAddTag}>Add</Button>
                                 </div>
                                 <Command>
-                                    <CommandInput placeholder="Filter tags..." />
+                                  <CommandInput 
+                                    placeholder="Filter tags..."
+                                    value={tagFilter}
+                                    onValueChange={setTagFilter}
+                                  />
+                                  <ScrollArea className="h-40">
                                     <CommandList>
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
-                                        {tags.map(tag => (
-                                            <CommandItem 
-                                                key={tag.id} 
-                                                className="flex justify-between items-center w-full p-2"
-                                                onSelect={(e) => { e.preventDefault()}}
-                                            >
+                                        {filteredTags.map(tag => (
+                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md">
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
-                                                    <span>{tag.label}</span>
+                                                    <span className="text-sm">{tag.label}</span>
                                                 </div>
                                                 <div className="flex items-center">
-                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild>
-                                                          <Button variant="ghost" size="icon" className="h-6 w-6">
-                                                              <X className="h-4 w-4" />
-                                                          </Button>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive">
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader>
@@ -455,10 +463,11 @@ export default function TaskPage() {
                                                         </AlertDialogContent>
                                                     </AlertDialog>
                                                 </div>
-                                            </CommandItem>
+                                            </div>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
+                                  </ScrollArea>
                                 </Command>
                             </div>
                         </PopoverContent>
