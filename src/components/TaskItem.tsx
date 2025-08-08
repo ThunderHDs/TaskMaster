@@ -165,10 +165,10 @@ export function TaskItem({
       const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
       const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
   
-      if (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) {
+      if ((parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) || !parentFrom && rangeFrom) {
         parentUpdate.dateRange!.from = newDateRange.from;
       }
-      if (parentTo && rangeTo && isAfter(rangeTo, parentTo)) {
+      if ((parentTo && rangeTo && isAfter(rangeTo, parentTo)) || !parentTo && rangeTo) {
         parentUpdate.dateRange!.to = newDateRange.to;
       }
       
@@ -188,7 +188,6 @@ export function TaskItem({
     setShowDateWarning(false);
     setNewDateRange(undefined);
     setDateChangeTarget(null);
-    setStagedParentUpdate(null);
   };
 
   const handleSave = () => {
@@ -305,6 +304,7 @@ export function TaskItem({
   const progress = calculateProgress();
   const TaskIcon = task.icon;
   const taskTags = allTags.filter(tag => task.tags?.includes(tag.id));
+  const truncatedTitle = task.title.length > 40 ? `${task.title.substring(0, 40)}...` : task.title;
 
   const getDueDateString = () => {
     if (!task.dateRange) return null;
@@ -333,8 +333,8 @@ export function TaskItem({
     const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
     const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
 
-    const startConflict = parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom);
-    const endConflict = parentTo && rangeTo && isAfter(rangeTo, parentTo);
+    const startConflict = (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) || (!parentFrom && rangeFrom);
+    const endConflict = (parentTo && rangeTo && isAfter(rangeTo, parentTo)) || (!parentTo && rangeTo);
 
     if (startConflict && endConflict) {
       return "The selected dates are outside the parent task's date range. Would you like to expand the parent task's dates to match?";
@@ -352,7 +352,7 @@ export function TaskItem({
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
-     <Collapsible open={openActivityTaskId === task.id} onOpenChange={() => onToggleActivity(task.id)}>
+     <Collapsible open={openActivityTaskId === task.id && !isEditing} onOpenChange={() => onToggleActivity(task.id)}>
       <div className={cn("flex flex-col gap-2", isCompact ? 'p-2' : 'p-3 sm:p-4')}>
         {isEditing ? (
           <div className="flex flex-col gap-3">
@@ -470,10 +470,10 @@ export function TaskItem({
                     )}
                     onClick={() => !isEditing && setIsEditing(true)}
                   >
-                    {task.title}
+                    {truncatedTitle}
                   </label>
                    {taskTags.length > 0 && isCompact && (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 items-baseline">
                       {taskTags.map(tag => (
                         <Badge
                           key={tag.id}
@@ -503,7 +503,7 @@ export function TaskItem({
                     </span>
                   )}
                    <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleActivity(task.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.preventDefault(); onToggleActivity(task.id);}}>
                       <History className="h-4 w-4" />
                     </Button>
                   </CollapsibleTrigger>
@@ -620,11 +620,12 @@ export function TaskItem({
                           rows={2}
                         />
                         <div className="flex flex-col sm:flex-row gap-2">
-                          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                          <Popover onOpenChange={(open) => !open && setIsDatePickerOpen(false)}>
                             <PopoverTrigger asChild>
                               <Button
                                 variant={'outline'}
                                 size="sm"
+                                onClick={() => setIsDatePickerOpen(true)}
                                 className={cn(
                                   'w-full justify-start text-left font-normal text-xs',
                                   !newSubtaskDateRange && 'text-muted-foreground'
@@ -647,7 +648,7 @@ export function TaskItem({
                                 )}
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                           {isDatePickerOpen && <PopoverContent className="w-auto p-0" align="start">
                               <Calendar
                                 initialFocus
                                 mode="range"
@@ -656,7 +657,7 @@ export function TaskItem({
                                 onSelect={range => handleSubtaskDateSelection(range)}
                                 numberOfMonths={1}
                               />
-                            </PopoverContent>
+                            </PopoverContent>}
                           </Popover>
 
                           <Popover>
@@ -791,7 +792,6 @@ export function TaskItem({
             <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
               confirmDateChange();
-              setIsDatePickerOpen(true);
             }}>Update Parent</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
