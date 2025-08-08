@@ -1,12 +1,15 @@
 'use client';
 
-import { Tag, Task } from '@/lib/types';
+import { Activity, Tag, Task } from '@/lib/types';
 import {
   Calendar as CalendarIcon,
   ChevronDown,
   ChevronRight,
+  History,
+  MessageSquare,
   MoreVertical,
   Plus,
+  Send,
   Sparkles,
   Tag as TagIcon,
   X,
@@ -19,7 +22,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { format, isAfter, isBefore, startOfDay } from 'date-fns';
+import { format, isAfter, isBefore, startOfDay, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SuggestSubtasksDialog } from './SuggestSubtasksDialog';
 import {
@@ -41,14 +44,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
+import { ScrollArea } from './ui/scroll-area';
+import { Separator } from './ui/separator';
 
 type TaskItemProps = {
   task: Task;
   allTags: Tag[];
-  onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>) => void;
+  onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>, activityLog?: string) => void;
   onToggleComplete: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => void;
+  onAddComment: (taskId: string, comment: string) => void;
   parentTask?: Task;
   level?: number;
 };
@@ -60,11 +66,14 @@ export function TaskItem({
   onToggleComplete,
   onDelete,
   onAddSubtask,
+  onAddComment,
   parentTask,
   level = 0,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
+  
+  const [newComment, setNewComment] = useState('');
 
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskDescription, setNewSubtaskDescription] = useState('');
@@ -85,18 +94,19 @@ export function TaskItem({
   
   const [stagedParentUpdate, setStagedParentUpdate] = useState<Partial<Task> | null>(null);
 
+  const handleAddComment = () => {
+    if (newComment.trim()) {
+      onAddComment(task.id, newComment.trim());
+      setNewComment('');
+    }
+  };
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
-    let newRange = range;
-    if (range?.from && !range.to) {
-        newRange = { from: undefined, to: range.from };
-    }
-    
-    handleDateChange(newRange, target);
+    handleDateChange(range, target);
     if (target === 'task') {
-        setEditedTask({ ...editedTask, dateRange: newRange });
+        setEditedTask({ ...editedTask, dateRange: range });
     } else {
-        setNewSubtaskDateRange(newRange);
+        setNewSubtaskDateRange(range);
     }
   };
 
@@ -106,7 +116,7 @@ export function TaskItem({
 
     const relevantParent = target === 'subtask' ? task : parentTask;
 
-    if (!relevantParent || !range?.from && !range?.to) {
+    if (!relevantParent || (!range?.from && !range?.to)) {
       if (target === 'task') {
         setEditedTask({ ...editedTask, dateRange: range });
       } else {
@@ -126,6 +136,7 @@ export function TaskItem({
     if (startConflict || endConflict) {
       setNewDateRange(range);
       setShowDateWarning(true);
+      setIsDatePickerOpen(false);
     } else {
       if (target === 'task') {
         setEditedTask({ ...editedTask, dateRange: range });
@@ -178,7 +189,12 @@ export function TaskItem({
   };
 
   const handleSave = () => {
-    const updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>> = {
+    let activityLog = '';
+    if (task.description !== editedTask.description) {
+      activityLog = 'Description updated.';
+    }
+
+    const updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon' | 'activity'>> = {
       title: editedTask.title,
       description: editedTask.description,
       dateRange: editedTask.dateRange,
@@ -186,10 +202,10 @@ export function TaskItem({
     }
     
     if (parentTask && stagedParentUpdate && dateChangeTarget === 'task') {
-        onUpdate(parentTask.id, stagedParentUpdate);
+        onUpdate(parentTask.id, stagedParentUpdate, `Date range extended for subtask: ${task.title}`);
     }
     
-    onUpdate(task.id, updates);
+    onUpdate(task.id, updates, activityLog);
 
     setIsEditing(false);
     setStagedParentUpdate(null);
@@ -222,6 +238,7 @@ export function TaskItem({
         dateRange: finalDateRange,
         tags: newSubtaskTags,
         completed: false,
+        activity: []
       }, parentUpdate ?? undefined);
       resetNewSubtaskForm();
       setIsExpanded(true);
@@ -230,7 +247,7 @@ export function TaskItem({
 
   const handleAddSuggestedSubtasks = (subtasks: string[]) => {
     subtasks.forEach(title => {
-      onAddSubtask(task.id, { title, completed: false });
+      onAddSubtask(task.id, { title, completed: false, activity: [] });
     });
     setIsExpanded(true);
   };
@@ -524,6 +541,7 @@ export function TaskItem({
                     onToggleComplete={onToggleComplete}
                     onDelete={onDelete}
                     onAddSubtask={onAddSubtask}
+                    onAddComment={onAddComment}
                     parentTask={task}
                     level={level + 1}
                   />
@@ -652,6 +670,54 @@ export function TaskItem({
           </div>
         )}
       </div>
+
+      <Separator />
+
+      <div className="p-3 sm:p-4">
+        <h4 className="text-sm font-semibold mb-3 flex items-center">
+            <History className="h-4 w-4 mr-2" />
+            Activity
+        </h4>
+        <div className="space-y-4 mb-4">
+            <div className="flex gap-3">
+                <Input 
+                    placeholder="Add a comment..."
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                />
+                <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()}>
+                    <Send className="h-4 w-4" />
+                </Button>
+            </div>
+
+            <ScrollArea className="h-40 pr-4">
+                <div className="space-y-4">
+                    {task.activity?.map(item => (
+                        <div key={item.id} className="flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-1">
+                                {item.type === 'comment' ? (
+                                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                    <History className="h-4 w-4 text-muted-foreground" />
+                                )}
+                            </div>
+                            <div className="flex-grow">
+                                <p className="text-sm">{item.content}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                    {(!task.activity || task.activity.length === 0) && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No activity yet.</p>
+                    )}
+                </div>
+            </ScrollArea>
+        </div>
+      </div>
+      
       {editedTask.description && (
         <SuggestSubtasksDialog
           open={showSubtaskSuggestions}

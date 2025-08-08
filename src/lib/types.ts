@@ -6,6 +6,13 @@ export type Tag = {
   color: string;
 };
 
+export type Activity = {
+  id: string;
+  type: 'comment' | 'log';
+  content: string;
+  timestamp: Date | string;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -18,4 +25,5 @@ export type Task = {
   subtasks: Task[];
   icon: LucideIcon;
   tags?: string[];
+  activity?: Activity[];
 };

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Tag, Task } from '@/lib/types';
+import { Activity, Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
@@ -12,13 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { CalendarView } from './CalendarView';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from './ui/command';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from './ui/calendar';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 
@@ -48,9 +47,10 @@ export default function TaskPage() {
         icon: Briefcase,
         dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 20) },
         tags: ['tag-1'],
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date(now.getFullYear(), now.getMonth(), 9) }],
         subtasks: [
-          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[] },
-          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 12), to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[] },
+          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[], activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date() }] },
+          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 12), to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[], activity: [] },
         ],
       },
       {
@@ -59,8 +59,9 @@ export default function TaskPage() {
         description: 'Buy ingredients for this week\'s meals.',
         completed: false,
         icon: ShoppingBasket,
-        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
+        dateRange: { from: new Date(), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
         tags: ['tag-4'],
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date() }],
         subtasks: [],
       },
       {
@@ -71,9 +72,10 @@ export default function TaskPage() {
         icon: Home,
         dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
         tags: ['tag-4'],
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date() }],
         subtasks: [
-          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) } },
-          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) } },
+          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) }, activity: [] },
+          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) }, activity: [] },
         ],
       },
     ];
@@ -82,7 +84,6 @@ export default function TaskPage() {
   }, []);
 
   const [newTagLabel, setNewTagLabel] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
@@ -141,14 +142,6 @@ export default function TaskPage() {
     setNewTaskTags([]);
     setShowNewTaskOptions(false);
   }
-  
-  const handleNewTaskDateChange = (range: DateRange | undefined) => {
-    if (range?.from && !range.to) {
-        setNewTaskDateRange({ from: undefined, to: range.from });
-    } else {
-        setNewTaskDateRange(range);
-    }
-  };
 
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
@@ -167,7 +160,8 @@ export default function TaskPage() {
         icon: randomIcon,
         subtasks: [],
         tags: newTaskTags,
-        dateRange: finalDateRange
+        dateRange: finalDateRange,
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date() }]
       };
       setTasks((prevTasks) => [newTask, ...prevTasks]);
       resetNewTaskForm();
@@ -184,23 +178,52 @@ export default function TaskPage() {
       if (task.id === id) {
         return updateFn(task);
       }
-      if (task.subtasks.length > 0) {
+      if (task.subtasks && task.subtasks.length > 0) {
         return { ...task, subtasks: updateTaskRecursively(task.subtasks, id, updateFn) };
       }
       return task;
-    }).filter(Boolean) as Task[];
+    });
   };
 
-  const handleUpdate = useCallback((id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>) => {
-    setTasks(prev => updateTaskRecursively(prev, id, task => ({ ...task, ...updates })));
+  const handleAddComment = useCallback((taskId: string, comment: string) => {
+    const newActivity: Activity = {
+      id: crypto.randomUUID(),
+      type: 'comment',
+      content: comment,
+      timestamp: new Date(),
+    };
+    setTasks(prev => updateTaskRecursively(prev, taskId, task => ({
+      ...task,
+      activity: [...(task.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    })));
+  }, []);
+
+  const handleUpdate = useCallback((id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon' | 'activity'>>, activityLog?: string) => {
+    setTasks(prev => updateTaskRecursively(prev, id, task => {
+      const updatedTask = { ...task, ...updates };
+      if (activityLog) {
+        const newActivity: Activity = {
+          id: crypto.randomUUID(),
+          type: 'log',
+          content: activityLog,
+          timestamp: new Date(),
+        };
+        updatedTask.activity = [...(updatedTask.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      }
+      return updatedTask;
+    }));
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-    const toggleChildren = (tasks: Task[], parentCompleted: boolean): Task[] => {
+    const logContent = completed ? 'Task marked as complete.' : 'Task marked as incomplete.';
+    const newActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: logContent, timestamp: new Date() };
+
+    const toggleChildrenAndLog = (tasks: Task[], parentCompleted: boolean): Task[] => {
         return tasks.map(task => ({
             ...task,
             completed: parentCompleted,
-            subtasks: task.subtasks ? toggleChildren(task.subtasks, parentCompleted) : [],
+            activity: [...(task.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+            subtasks: task.subtasks ? toggleChildrenAndLog(task.subtasks, parentCompleted) : [],
         }));
     };
 
@@ -209,6 +232,18 @@ export default function TaskPage() {
             if (task.subtasks && task.subtasks.length > 0) {
                 const newSubtasks = updateParents(task.subtasks);
                 const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+                
+                if (task.completed !== allChildrenCompleted) {
+                  const parentLogContent = allChildrenCompleted ? 'All subtasks completed, marking parent task as complete.' : 'Subtask marked as incomplete, marking parent task as incomplete.';
+                  const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date() };
+
+                  return { 
+                    ...task, 
+                    subtasks: newSubtasks, 
+                    completed: allChildrenCompleted,
+                    activity: [...(task.activity || []), parentNewActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+                  };
+                }
                 return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
             }
             return task;
@@ -218,9 +253,13 @@ export default function TaskPage() {
     const updateTasks = (tasks: Task[], targetId: string, isCompleted: boolean): Task[] => {
         return tasks.map(task => {
             if (task.id === targetId) {
-                const updatedTask = { ...task, completed: isCompleted };
+                const updatedTask = { 
+                  ...task, 
+                  completed: isCompleted,
+                  activity: [...(task.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+                };
                 if (updatedTask.subtasks) {
-                    updatedTask.subtasks = toggleChildren(updatedTask.subtasks, isCompleted);
+                    updatedTask.subtasks = toggleChildrenAndLog(updatedTask.subtasks, isCompleted);
                 }
                 return updatedTask;
             }
@@ -240,7 +279,7 @@ export default function TaskPage() {
   const handleDelete = useCallback((id: string) => {
     const deleteRecursively = (taskList: Task[], idToDelete: string): Task[] => {
       return taskList.filter(task => task.id !== idToDelete).map(task => {
-        if (task.subtasks.length > 0) {
+        if (task.subtasks && task.subtasks.length > 0) {
           return { ...task, subtasks: deleteRecursively(task.subtasks, idToDelete) };
         }
         return task;
@@ -257,27 +296,38 @@ export default function TaskPage() {
         id: crypto.randomUUID(),
         icon: randomIcon,
         subtasks: [],
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Subtask created.', timestamp: new Date() }],
     };
+
+    const addLogToParent: Activity = {
+      id: crypto.randomUUID(),
+      type: 'log',
+      content: `New subtask added: "${newSubtask.title}"`,
+      timestamp: new Date()
+    }
 
     let tasksAfterUpdate = tasks;
     if (parentUpdate) {
         tasksAfterUpdate = updateTaskRecursively(tasks, parentId, task => ({ ...task, ...parentUpdate }))
     }
     
-    setTasks(updateTaskRecursively(tasksAfterUpdate, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
+    setTasks(updateTaskRecursively(tasksAfterUpdate, parentId, task => ({ 
+      ...task, 
+      subtasks: [...(task.subtasks || []), newSubtask], 
+      completed: false,
+      activity: [...(task.activity || []), addLogToParent].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    })));
   }, [tasks]);
 
   const filteredAndSortedTasks = useMemo(() => {
-    let filteredTasks = tasks;
+    let filteredTasks = [...tasks];
     if (filter === 'done') {
-      filteredTasks = tasks.filter(task => task.completed);
+      filteredTasks = filteredTasks.filter(task => task.completed);
     } else if (filter === 'undone') {
-      filteredTasks = tasks.filter(task => !task.completed);
+      filteredTasks = filteredTasks.filter(task => !task.completed);
     }
     
-    const tasksToSort = [...filteredTasks];
-    
-    return tasksToSort.sort((a, b) => {
+    return filteredTasks.sort((a, b) => {
       const aDateValue = a.dateRange?.from || a.dateRange?.to;
       const bDateValue = b.dateRange?.from || b.dateRange?.to;
       const aDate = aDateValue ? new Date(aDateValue).getTime() : (sortAsc ? Infinity : -Infinity);
@@ -291,11 +341,6 @@ export default function TaskPage() {
       prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]
     );
   };
-
-  const filteredTags = useMemo(() => {
-    if (!tagFilter) return tags;
-    return tags.filter(tag => tag.label.toLowerCase().includes(tagFilter.toLowerCase()));
-  }, [tags, tagFilter]);
 
   return (
     <div className="w-full">
@@ -353,7 +398,7 @@ export default function TaskPage() {
                                     mode="range"
                                     defaultMonth={newTaskDateRange?.from}
                                     selected={newTaskDateRange}
-                                    onSelect={handleNewTaskDateChange}
+                                    onSelect={setNewTaskDateRange}
                                     numberOfMonths={2}
                                 />
                             </PopoverContent>
@@ -453,8 +498,7 @@ export default function TaskPage() {
                                                           variant="ghost"
                                                           size="icon"
                                                           className="h-6 w-6"
-                                                          onClick={(e) => {
-                                                              e.stopPropagation();
+                                                          onClick={() => {
                                                               setEditingTag({ ...tag });
                                                           }}
                                                       >
@@ -466,7 +510,6 @@ export default function TaskPage() {
                                                                   variant="ghost"
                                                                   size="icon"
                                                                   className="h-6 w-6 text-destructive hover:text-destructive"
-                                                                  onClick={(e) => e.stopPropagation()}
                                                               >
                                                                   <X className="h-4 w-4" />
                                                               </Button>
@@ -509,6 +552,7 @@ export default function TaskPage() {
                   onToggleComplete={handleToggleComplete}
                   onDelete={handleDelete}
                   onAddSubtask={handleAddSubtask}
+                  onAddComment={handleAddComment}
                   level={0}
                 />
               ))}
