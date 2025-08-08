@@ -19,7 +19,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { format, isAfter, isBefore } from 'date-fns';
+import { format, isAfter, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SuggestSubtasksDialog } from './SuggestSubtasksDialog';
 import {
@@ -71,31 +71,52 @@ export function TaskItem({
   const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
 
 
-  const handleDateChange = (range: DateRange | undefined) => {
-    if (parentTask?.dateRange?.from && range?.from && isBefore(range.from, new Date(parentTask.dateRange.from))) {
-        setNewDateRange(range);
-        setDateWarningType('start');
-        setShowDateWarning(true);
-    } else if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, new Date(parentTask.dateRange.to))) {
+  const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+    if (!parentTask || !range) {
+      if(target === 'task') setEditedTask({ ...editedTask, dateRange: range });
+      else setNewSubtaskDateRange(range)
+      return;
+    }
+
+    const parentFrom = parentTask.dateRange?.from ? startOfDay(new Date(parentTask.dateRange.from)) : null;
+    const parentTo = parentTask.dateRange?.to ? startOfDay(new Date(parentTask.dateRange.to)) : null;
+    const rangeFrom = range.from ? startOfDay(new Date(range.from)) : null;
+    const rangeTo = range.to ? startOfDay(new Date(range.to)) : null;
+
+    if (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) {
+      setNewDateRange(range);
+      setDateWarningType('start');
+      setShowDateWarning(true);
+    } else if (parentTo && rangeTo && isAfter(rangeTo, parentTo)) {
       setNewDateRange(range);
       setDateWarningType('end');
       setShowDateWarning(true);
     } else {
-      setEditedTask({ ...editedTask, dateRange: range ?? undefined });
+      if(target === 'task') setEditedTask({ ...editedTask, dateRange: range });
+      else setNewSubtaskDateRange(range)
     }
   };
   
   const confirmDateChange = () => {
     if (newDateRange && parentTask && dateWarningType) {
-        const parentUpdate: Partial<Task> = {};
+        const parentUpdate: Partial<Task> = { dateRange: { ...parentTask.dateRange } };
+
         if (dateWarningType === 'start' && newDateRange.from) {
-            parentUpdate.dateRange = { from: newDateRange.from, to: parentTask.dateRange?.to };
+            parentUpdate.dateRange!.from = newDateRange.from;
         } else if (dateWarningType === 'end' && newDateRange.to) {
-            parentUpdate.dateRange = { from: parentTask.dateRange?.from, to: newDateRange.to };
+            parentUpdate.dateRange!.to = newDateRange.to;
         }
+
         onUpdate(parentTask.id, parentUpdate);
-        setEditedTask({ ...editedTask, dateRange: newDateRange });
+        
+        // This logic depends on whether we are editing the task itself or adding a new subtask
+        if(isEditing) {
+            setEditedTask({ ...editedTask, dateRange: newDateRange });
+        } else {
+            setNewSubtaskDateRange(newDateRange);
+        }
     }
+    
     setShowDateWarning(false);
     setNewDateRange(undefined);
     setDateWarningType(null);
@@ -274,7 +295,7 @@ export function TaskItem({
                   mode="range"
                   defaultMonth={editedTask.dateRange?.from ? new Date(editedTask.dateRange.from) : undefined}
                   selected={editedTask.dateRange ? { from: editedTask.dateRange.from ? new Date(editedTask.dateRange.from) : undefined, to: editedTask.dateRange.to ? new Date(editedTask.dateRange.to) : undefined } : undefined}
-                  onSelect={handleDateChange}
+                  onSelect={(range) => handleDateChange(range, 'task')}
                   numberOfMonths={2}
                 />
               </PopoverContent>
@@ -446,7 +467,7 @@ export function TaskItem({
                                             mode="range"
                                             defaultMonth={newSubtaskDateRange?.from}
                                             selected={newSubtaskDateRange}
-                                            onSelect={setNewSubtaskDateRange}
+                                            onSelect={(range) => handleDateChange(range, 'subtask')}
                                             numberOfMonths={1}
                                         />
                                     </PopoverContent>
