@@ -5,7 +5,7 @@ import { Activity, Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Rows, Columns, ArrowLeft } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Rows, Columns, ArrowLeft, Loader2 } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -21,6 +21,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, writeBatch, serverTimestamp, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { LucideIcon } from 'lucide-react';
 
 const initialTags: Tag[] = [
   { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
@@ -29,68 +32,80 @@ const initialTags: Tag[] = [
   { id: 'tag-4', label: 'Personal', color: '#8B5CF6' },
 ];
 
-const icons = [Briefcase, Home, ShoppingBasket];
+const icons: Record<string, LucideIcon> = { Briefcase, Home, ShoppingBasket };
+const iconNames = Object.keys(icons);
 
 type FilterType = 'all' | 'done' | 'undone';
 type ViewMode = 'default' | 'compact';
 
-export default function TaskPage() {
+// Helper to convert Firestore timestamps to Dates
+const convertTimestamps = (task: any): Task => {
+  const toDate = (timestamp: any) => timestamp instanceof Timestamp ? timestamp.toDate() : timestamp;
+  
+  let dateRange;
+  if (task.dateRange) {
+    dateRange = {
+      from: task.dateRange.from ? toDate(task.dateRange.from) : undefined,
+      to: task.dateRange.to ? toDate(task.dateRange.to) : undefined,
+    }
+  }
+
+  const activity = task.activity?.map((a: any) => ({ ...a, timestamp: toDate(a.timestamp) })) || [];
+  const subtasks = task.subtasks?.map(convertTimestamps) || [];
+  
+  return { ...task, dateRange, activity, subtasks, icon: icons[task.icon] || Briefcase };
+};
+
+export default function TaskPage({ userId }: { userId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [viewMode, setViewMode] = useState<ViewMode>('default');
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-  
-  useEffect(() => {
-    const now = new Date();
-    const initialTasksWithDates = [
-      {
-        id: '1',
-        title: 'Plan Q3 marketing campaign',
-        description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
-        completed: false,
-        icon: Briefcase,
-        dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 20) },
-        tags: ['tag-1'],
-        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date(now.getFullYear(), now.getMonth(), 9), taskId: '1' }],
-        subtasks: [
-          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[], activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date(), taskId: '1-1' }] },
-          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 12), to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[], activity: [] },
-        ],
-      },
-      {
-        id: '2',
-        title: 'Grocery shopping',
-        description: 'Buy ingredients for this week\'s meals.',
-        completed: false,
-        icon: ShoppingBasket,
-        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
-        tags: ['tag-4'],
-        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date(), taskId: '2' }],
-        subtasks: [],
-      },
-      {
-        id: '3',
-        title: 'Organize home office',
-        description: 'Declutter desk, sort documents, and set up new monitor.',
-        completed: true,
-        icon: Home,
-        dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
-        tags: ['tag-4'],
-        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date(), taskId: '3' }],
-        subtasks: [
-          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) }, activity: [{id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date(), taskId: '3-1'}] },
-          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) }, activity: [{id: crypto.randomUUID(), type: 'log', content: 'Task marked as complete.', timestamp: new Date(), taskId: '3-2'}] },
-        ],
-      },
-    ];
-    setTasks(initialTasksWithDates);
-    setTags(initialTags);
 
+  useEffect(() => {
     const savedViewMode = localStorage.getItem('task-view-mode') as ViewMode | null;
     if (savedViewMode) {
       setViewMode(savedViewMode);
     }
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    const q = query(collection(db, 'users', userId, 'tasks'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tasksData = snapshot.docs.map(doc => convertTimestamps({ id: doc.id, ...doc.data() }));
+      setTasks(tasksData);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const tagsCollection = collection(db, 'users', userId, 'tags');
+    const unsubscribe = onSnapshot(tagsCollection, (snapshot) => {
+      if (snapshot.empty) {
+        // If no tags, create initial tags
+        const batch = writeBatch(db);
+        initialTags.forEach(tag => {
+          const newTagRef = doc(tagsCollection);
+          batch.set(newTagRef, { ...tag, id: newTagRef.id });
+        });
+        batch.commit().then(() => {
+          // Tags will be fetched by the snapshot listener
+        });
+      } else {
+        const tagsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tag));
+        setTags(tagsData);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [userId]);
+  
 
   const [newTagLabel, setNewTagLabel] = useState('');
   
@@ -106,41 +121,46 @@ export default function TaskPage() {
   const [openActivityTaskId, setOpenActivityTaskId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleUpdateTag = () => {
+  const handleUpdateTag = async () => {
     if (!editingTag || !editingTag.label.trim()) {
       toast({ title: "Tag name can't be empty", variant: "destructive" });
       return;
     }
-    setTags(tags.map(t => t.id === editingTag.id ? editingTag : t));
+    const tagRef = doc(db, 'users', userId, 'tags', editingTag.id);
+    await updateDoc(tagRef, { label: editingTag.label, color: editingTag.color });
     setEditingTag(null);
     toast({ title: "Tag updated!" });
   }
 
-  const handleDeleteTag = (tagId: string) => {
-    setTags(tags.filter(t => t.id !== tagId));
-    setTasks(prevTasks => {
-      const removeTagFromTasks = (taskList: Task[]): Task[] => {
-        return taskList.map(task => {
-          const newTags = task.tags?.filter(tId => tId !== tagId);
-          const newSubtasks = task.subtasks ? removeTagFromTasks(task.subtasks) : [];
-          return {...task, tags: newTags, subtasks: newSubtasks};
-        });
-      };
-      return removeTagFromTasks(prevTasks);
+  const handleDeleteTag = async (tagId: string) => {
+    await deleteDoc(doc(db, 'users', userId, 'tags', tagId));
+
+    const batch = writeBatch(db);
+    tasks.forEach(task => {
+        const removeTagRecursively = (currentTask: Task, path: string) => {
+            if (currentTask.tags?.includes(tagId)) {
+                const taskRef = doc(db, path);
+                const newTags = currentTask.tags.filter(t => t !== tagId);
+                batch.update(taskRef, { tags: newTags });
+            }
+            currentTask.subtasks.forEach(sub => removeTagRecursively(sub, `${path}/subtasks/${sub.id}`));
+        };
+        removeTagRecursively(task, `users/${userId}/tasks/${task.id}`);
     });
+    
+    await batch.commit();
     setEditingTag(null);
     toast({ title: "Tag deleted and removed from all tasks." });
   };
 
 
-  const handleAddTag = () => {
+  const handleAddTag = async () => {
     if (newTagLabel.trim() && !tags.find(t => t.label.toLowerCase() === newTagLabel.trim().toLowerCase())) {
-      const newTag: Tag = {
-        id: crypto.randomUUID(),
+      const newTag = {
         label: newTagLabel.trim(),
         color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
       };
-      setTags(prev => [...prev, newTag]);
+      await addDoc(collection(db, 'users', userId, 'tags'), newTag);
       setNewTagLabel('');
     }
   };
@@ -153,62 +173,88 @@ export default function TaskPage() {
     setShowNewTaskOptions(false);
   }
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (newTaskTitle.trim()) {
-      const randomIcon = icons[Math.floor(Math.random() * icons.length)];
+      const randomIconName = iconNames[Math.floor(Math.random() * iconNames.length)];
       
       let finalDateRange = newTaskDateRange;
       if (finalDateRange?.to && !finalDateRange.from) {
         finalDateRange = { from: new Date(), to: finalDateRange.to };
       }
 
-      const newTaskId = crypto.randomUUID();
-      const newTask: Task = {
-        id: newTaskId,
+      const newTask: Omit<Task, 'id' | 'icon'> & { icon: string, createdAt: any } = {
         title: newTaskTitle.trim(),
         description: newTaskDescription.trim() || undefined,
         completed: false,
-        icon: randomIcon,
+        icon: randomIconName,
         subtasks: [],
         tags: newTaskTags,
         dateRange: finalDateRange,
-        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date(), taskId: newTaskId }]
+        activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date(), taskId: '' }],
+        createdAt: serverTimestamp()
       };
-      setTasks((prevTasks) => [newTask, ...prevTasks]);
+      const docRef = await addDoc(collection(db, 'users', userId, 'tasks'), newTask);
+      await updateDoc(doc(db, 'users', userId, 'tasks', docRef.id, 'activity', newTask.activity[0].id), {taskId: docRef.id});
+
       resetNewTaskForm();
       toast({ title: "Task added!", description: `"${newTask.title}" has been added.` });
     }
   };
 
-  const updateTaskRecursively = (
-    taskList: Task[],
-    id: string,
-    updateFn: (task: Task) => Task,
-    parentId?: string
-  ): Task[] => {
-    return taskList.map((task) => {
-      if (task.id === id) {
-        return updateFn(task);
+  const getTaskPath = (taskId: string) => {
+    let path = `users/${userId}/tasks/${taskId}`;
+    const findPath = (tasks: Task[], id: string, currentPath: string): string | null => {
+      for (const task of tasks) {
+        if (task.id === id) return `${currentPath}/${task.id}`;
+        const subPath = findPath(task.subtasks, id, `${currentPath}/${task.id}/subtasks`);
+        if (subPath) return subPath;
       }
-      if (task.subtasks && task.subtasks.length > 0) {
-        return { ...task, subtasks: updateTaskRecursively(task.subtasks, id, updateFn, task.id) };
-      }
-      return task;
-    });
-  };
+      return null;
+    }
 
-  const addActivityToParent = (tasks: Task[], parentId: string, activity: Activity) => {
-    return tasks.map(task => {
-        if (task.id === parentId) {
-            const newActivity = [...(task.activity || []), activity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            return {...task, activity: newActivity};
-        }
-        if (task.subtasks && task.subtasks.length > 0) {
-            return {...task, subtasks: addActivityToParent(task.subtasks, parentId, activity)};
-        }
-        return task;
-    })
+    const fullPath = findPath(tasks, taskId, `users/${userId}/tasks`);
+    return fullPath || path; // Fallback to top-level if not found (e.g., during creation)
   }
+
+  const handleAddComment = useCallback(async (taskId: string, comment: string) => {
+    const newActivity: Activity = {
+      id: crypto.randomUUID(),
+      type: 'comment',
+      content: comment,
+      timestamp: new Date(),
+      taskId,
+    };
+    const taskPath = getTaskPath(taskId);
+    await addDoc(collection(db, taskPath, 'activity'), newActivity);
+    
+    // Also add to parent if it's a subtask
+    const parentId = findParentId(tasks, taskId);
+    if (parentId) {
+      const parentPath = getTaskPath(parentId);
+      await addDoc(collection(db, parentPath, 'activity'), newActivity);
+    }
+  }, [userId, tasks]);
+
+  const handleUpdate = useCallback(async (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon' | 'activity'>>, activityLog?: string) => {
+    const taskPath = getTaskPath(id);
+    await updateDoc(doc(db, taskPath), updates);
+
+    if (activityLog) {
+      const newActivity: Omit<Activity, 'id'> = {
+        type: 'log',
+        content: activityLog,
+        timestamp: new Date(),
+        taskId: id,
+      };
+      await addDoc(collection(db, taskPath, 'activity'), newActivity);
+
+      const parentId = findParentId(tasks, id);
+      if (parentId) {
+        const parentPath = getTaskPath(parentId);
+        await addDoc(collection(db, parentPath, 'activity'), newActivity);
+      }
+    }
+  }, [userId, tasks]);
 
   const findParentId = (tasks: Task[], childId: string): string | null => {
     for (const task of tasks) {
@@ -223,181 +269,116 @@ export default function TaskPage() {
     return null;
   }
 
-  const handleAddComment = useCallback((taskId: string, comment: string) => {
-    setTasks(prev => {
-        const newActivity: Activity = {
-            id: crypto.randomUUID(),
-            type: 'comment',
-            content: comment,
-            timestamp: new Date(),
-            taskId,
-        };
-        let updatedTasks = updateTaskRecursively(prev, taskId, task => ({
-            ...task,
-            activity: [...(task.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-        }));
-
-        const parentId = findParentId(updatedTasks, taskId);
-        if (parentId) {
-            updatedTasks = addActivityToParent(updatedTasks, parentId, newActivity);
-        }
-
-        return updatedTasks;
-    });
-  }, []);
-
-  const handleUpdate = useCallback((id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon' | 'activity'>>, activityLog?: string) => {
-    setTasks(prev => {
-        let updatedTasks = prev;
-        const newActivity: Activity | null = activityLog ? {
-            id: crypto.randomUUID(),
-            type: 'log',
-            content: activityLog,
-            timestamp: new Date(),
-            taskId: id,
-        } : null;
-
-        updatedTasks = updateTaskRecursively(updatedTasks, id, task => {
-            const updatedTask = { ...task, ...updates };
-            if (newActivity) {
-                updatedTask.activity = [...(updatedTask.activity || []), newActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            }
-            return updatedTask;
-        });
-
-        if (newActivity) {
-            const parentId = findParentId(updatedTasks, id);
-            if (parentId) {
-                updatedTasks = addActivityToParent(updatedTasks, parentId, newActivity);
-            }
-        }
-        return updatedTasks;
-    });
-  }, []);
-
-  const handleToggleComplete = useCallback((id: string, completed: boolean, title: string) => {
+  const handleToggleComplete = useCallback(async (id: string, completed: boolean, title: string) => {
+    const taskPath = getTaskPath(id);
+    const taskRef = doc(db, taskPath);
     const logContent = completed ? 'Task marked as complete.' : 'Task marked as incomplete.';
-    const newActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: logContent, timestamp: new Date(), taskId: id };
+    const newActivity: Omit<Activity, 'id'> = { type: 'log', content: logContent, timestamp: new Date(), taskId: id };
 
-    const toggleChildrenAndLog = (tasks: Task[], parentCompleted: boolean): Task[] => {
-      return tasks.map(task => ({
-        ...task,
-        completed: parentCompleted,
-        activity: [...(task.activity || []), { ...newActivity, taskId: task.id }].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-        subtasks: task.subtasks ? toggleChildrenAndLog(task.subtasks, parentCompleted) : [],
-      }));
+    const batch = writeBatch(db);
+
+    const toggleChildrenRecursively = async (currentTaskRef: any, parentCompleted: boolean) => {
+        batch.update(currentTaskRef, { completed: parentCompleted });
+        const activityCol = collection(currentTaskRef, 'activity');
+        batch.set(doc(activityCol), { ...newActivity, taskId: currentTaskRef.id });
+
+        const subtasksSnapshot = await getDocs(collection(currentTaskRef, 'subtasks'));
+        subtasksSnapshot.forEach(subDoc => {
+            toggleChildrenRecursively(subDoc.ref, parentCompleted);
+        });
     };
 
-    const updateParents = (tasks: Task[], originalTasks: Task[]): Task[] => {
-      return tasks.map(task => {
-        if (task.subtasks && task.subtasks.length > 0) {
-          const newSubtasks = updateParents(task.subtasks, originalTasks);
-          const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
-          
-          if (task.completed !== allChildrenCompleted) {
-            const parentLogContent = allChildrenCompleted ? 'All subtasks completed, marking parent task as complete.' : 'Subtask marked as incomplete, marking parent task as incomplete.';
-            const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: task.id };
+    await toggleChildrenRecursively(taskRef, completed);
 
-            return {
-              ...task,
-              subtasks: newSubtasks,
-              completed: allChildrenCompleted,
-              activity: [...(task.activity || []), parentNewActivity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-            };
-          }
-          return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
-        }
-        return task;
-      });
-    };
+    // Update parent completion status
+    const updateParents = async (childId: string, isCompleted: boolean) => {
+        const parentId = findParentId(tasks, childId);
+        if (!parentId) return;
 
-    const updateTasks = (tasks: Task[], targetId: string, isCompleted: boolean): Task[] => {
-      return tasks.map(task => {
-        if (task.id === targetId) {
-          const updatedTask = {
-            ...task,
-            completed: isCompleted,
-            activity: [...(task.activity || []), newActivity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-          };
-          if (updatedTask.subtasks) {
-            updatedTask.subtasks = toggleChildrenAndLog(updatedTask.subtasks, isCompleted);
-          }
-          return updatedTask;
-        }
-        if (task.subtasks && task.subtasks.length > 0) {
-          return { ...task, subtasks: updateTasks(task.subtasks, targetId, isCompleted) };
-        }
-        return task;
-      });
-    };
-
-    setTasks(currentTasks => {
-      let tasksWithToggledItem = updateTasks(currentTasks, id, completed);
-      let finalTasks = updateParents(tasksWithToggledItem, currentTasks);
-
-      const parentId = findParentId(finalTasks, id);
-      if (parentId) {
-        const parentLogContent = completed
-          ? `Subtask '${title}' marked as complete.`
-          : `Subtask '${title}' marked as incomplete.`;
-        const parentNewActivity: Activity = { id: crypto.randomUUID(), type: 'log', content: parentLogContent, timestamp: new Date(), taskId: id };
-        return addActivityToParent(finalTasks, parentId, parentNewActivity);
-      }
-      return finalTasks;
-    });
-  }, []);
-
-  const handleDelete = useCallback((id: string) => {
-    const deleteRecursively = (taskList: Task[], idToDelete: string): Task[] => {
-      return taskList.filter(task => task.id !== idToDelete).map(task => {
-        if (task.subtasks && task.subtasks.length > 0) {
-          return { ...task, subtasks: deleteRecursively(task.subtasks, idToDelete) };
-        }
-        return task;
-      });
-    };
-    setTasks(prev => deleteRecursively(prev, id));
-    toast({ title: "Task deleted.", variant: "destructive" });
-  }, [toast]);
-  
-  const handleAddSubtask = useCallback((parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => {
-    setTasks(prevTasks => {
-        const randomIcon = icons[Math.floor(Math.random() * icons.length)];
-        let finalSubtaskData = { ...subtaskData };
-        if (finalSubtaskData.dateRange?.to && !finalSubtaskData.dateRange.from) {
-            finalSubtaskData.dateRange.from = new Date();
-        }
+        const parentPath = getTaskPath(parentId);
+        const parentRef = doc(db, parentPath);
+        const subtasksCol = collection(parentRef, 'subtasks');
+        const subtasksSnapshot = await getDocs(subtasksCol);
         
-        const newSubtaskId = crypto.randomUUID();
-        const newSubtask: Task = {
-            ...finalSubtaskData,
-            id: newSubtaskId,
-            icon: randomIcon,
-            subtasks: [],
-            activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Subtask created.', timestamp: new Date(), taskId: newSubtaskId }],
-        };
-
-        let tasksAfterUpdate = prevTasks;
-        if (parentUpdate) {
-            tasksAfterUpdate = updateTaskRecursively(tasksAfterUpdate, parentId, task => ({ ...task, ...parentUpdate }));
+        // Check if all other siblings are completed
+        let allSiblingsCompleted = isCompleted;
+        if (isCompleted) {
+            for (const subDoc of subtasksSnapshot.docs) {
+                if (subDoc.id !== childId && !subDoc.data().completed) {
+                    allSiblingsCompleted = false;
+                    break;
+                }
+            }
+        } else {
+            allSiblingsCompleted = false;
         }
 
-        const addLogToParentActivity: Activity = {
-            id: crypto.randomUUID(),
-            type: 'log',
-            content: `New subtask added: "${newSubtask.title}"`,
-            timestamp: new Date(),
-            taskId: newSubtaskId,
-        };
+        if (allSiblingsCompleted !== (tasks.find(t => t.id === parentId)?.completed)) {
+            batch.update(parentRef, { completed: allSiblingsCompleted });
+            const parentLog = allSiblingsCompleted ? 'All subtasks completed, marking parent task as complete.' : 'Subtask marked as incomplete, marking parent task as incomplete.';
+            batch.set(doc(collection(parentRef, 'activity')), { type: 'log', content: parentLog, timestamp: new Date(), taskId: parentId });
+        }
+        await updateParents(parentId, allSiblingsCompleted);
+    };
+    
+    await updateParents(id, completed);
 
-        return updateTaskRecursively(tasksAfterUpdate, parentId, task => ({ 
-            ...task, 
-            subtasks: [...(task.subtasks || []), newSubtask], 
-            completed: false,
-            activity: [...(task.activity || []), addLogToParentActivity].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-        }));
-    });
-  }, []);
+    const parentId = findParentId(tasks, id);
+    if(parentId) {
+      const parentLogContent = completed ? `Subtask '${title}' marked as complete.` : `Subtask '${title}' marked as incomplete.`;
+      const parentPath = getTaskPath(parentId);
+      batch.set(doc(collection(db, parentPath, 'activity')), { type: 'log', content: parentLogContent, timestamp: new Date(), taskId: id });
+    }
+
+    await batch.commit();
+
+  }, [userId, tasks]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    const taskPath = getTaskPath(id);
+    await deleteDoc(doc(db, taskPath));
+    toast({ title: "Task deleted.", variant: "destructive" });
+  }, [userId, tasks]);
+  
+  const handleAddSubtask = useCallback(async (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => {
+      const parentPath = getTaskPath(parentId);
+      const parentRef = doc(db, parentPath);
+      const randomIconName = iconNames[Math.floor(Math.random() * iconNames.length)];
+
+      let finalSubtaskData: any = { ...subtaskData };
+      if (finalSubtaskData.dateRange?.to && !finalSubtaskData.dateRange.from) {
+          finalSubtaskData.dateRange.from = new Date();
+      }
+      
+      const newSubtask: any = {
+          ...finalSubtaskData,
+          icon: randomIconName,
+          subtasks: [],
+          createdAt: serverTimestamp(),
+      };
+      
+      const batch = writeBatch(db);
+
+      if (parentUpdate) {
+        batch.update(parentRef, parentUpdate);
+      }
+
+      const subtaskRef = await addDoc(collection(parentRef, 'subtasks'), newSubtask);
+      const activityRef = collection(subtaskRef, 'activity');
+      batch.set(doc(activityRef), { type: 'log', content: 'Subtask created.', timestamp: new Date(), taskId: subtaskRef.id });
+
+      const addLogToParentActivity = {
+          type: 'log',
+          content: `New subtask added: "${newSubtask.title}"`,
+          timestamp: new Date(),
+          taskId: subtaskRef.id,
+      };
+      batch.set(doc(collection(parentRef, 'activity')), addLogToParentActivity);
+      batch.update(parentRef, { completed: false });
+      
+      await batch.commit();
+
+  }, [userId, tasks]);
 
   const handleTaskClick = (task: Task) => {
     if (viewMode === 'compact') {
@@ -413,7 +394,16 @@ export default function TaskPage() {
     let tasksToDisplay = tasks;
 
     if (viewMode === 'compact' && focusedTaskId) {
-      const focusedTask = tasks.find(t => t.id === focusedTaskId);
+      const findTask = (tasks: Task[], id: string): Task | undefined => {
+        for(const task of tasks) {
+          if (task.id === id) return task;
+          if (task.subtasks) {
+            const found = findTask(task.subtasks, id);
+            if(found) return found;
+          }
+        }
+      }
+      const focusedTask = findTask(tasks, focusedTaskId);
       tasksToDisplay = focusedTask ? [focusedTask] : [];
     }
     
@@ -453,6 +443,15 @@ export default function TaskPage() {
     localStorage.setItem('task-view-mode', newMode);
   };
 
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Loading your tasks...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -689,6 +688,7 @@ export default function TaskPage() {
                   level={0}
                   viewMode={focusedTaskId && task.id === focusedTaskId ? 'default' : viewMode}
                   onTaskClick={handleTaskClick}
+                  userId={userId}
                 />
               ))}
               {filteredAndSortedTasks.length === 0 && (

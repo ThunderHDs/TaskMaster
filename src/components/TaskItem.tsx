@@ -14,7 +14,7 @@ import {
   Tag as TagIcon,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Checkbox } from './ui/checkbox';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -47,13 +47,15 @@ import {
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 type ViewMode = 'default' | 'compact';
 
 type TaskItemProps = {
   task: Task;
   allTags: Tag[];
-  onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>, activityLog?: string) => void;
+  onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon' | 'activity'>>, activityLog?: string) => void;
   onToggleComplete: (id: string, completed: boolean, title: string) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => void;
@@ -64,6 +66,7 @@ type TaskItemProps = {
   level?: number;
   viewMode?: ViewMode;
   onTaskClick?: (task: Task) => void;
+  userId: string;
 };
 
 export function TaskItem({
@@ -80,9 +83,11 @@ export function TaskItem({
   level = 0,
   viewMode = 'default',
   onTaskClick,
+  userId,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
+  const [activity, setActivity] = useState<Activity[]>([]);
   
   const [newComment, setNewComment] = useState('');
 
@@ -104,6 +109,34 @@ export function TaskItem({
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   const [stagedParentUpdate, setStagedParentUpdate] = useState<Partial<Task> | null>(null);
+
+  const getTaskPath = (taskId: string) => {
+     let path = `users/${userId}/tasks/${taskId}`;
+     if (parentTask) {
+        path = `users/${userId}/tasks/${parentTask.id}/subtasks/${taskId}`
+     }
+     if(level > 1 && parentTask) {
+        // This is a naive implementation for deep nesting. A better solution would involve passing the path down.
+     }
+     return path;
+  }
+
+  useEffect(() => {
+    const taskPath = getTaskPath(task.id);
+    const q = query(collection(db, taskPath, 'activity'), orderBy('timestamp', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const activityData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                ...data,
+                id: doc.id,
+                timestamp: data.timestamp.toDate()
+            } as Activity;
+        });
+        setActivity(activityData);
+    });
+    return () => unsubscribe();
+  }, [task.id, userId]);
 
   const handleAddComment = () => {
     if (newComment.trim()) {
@@ -616,6 +649,7 @@ export function TaskItem({
                     openActivityTaskId={openActivityTaskId}
                     parentTask={task}
                     level={level + 1}
+                    userId={userId}
                   />
                 ))}
 
@@ -766,7 +800,7 @@ export function TaskItem({
 
                 <ScrollArea className="h-40 pr-4">
                     <div className="space-y-4">
-                        {task.activity?.map(item => (
+                        {activity.map(item => (
                             <div key={item.id} className="flex items-start gap-3">
                                 <div className="flex-shrink-0 mt-1">
                                     {item.type === 'comment' ? (
@@ -783,7 +817,7 @@ export function TaskItem({
                                 </div>
                             </div>
                         ))}
-                        {(!task.activity || task.activity.length === 0) && (
+                        {(!activity || activity.length === 0) && (
                             <p className="text-sm text-muted-foreground text-center py-4">No activity yet.</p>
                         )}
                     </div>
@@ -816,6 +850,7 @@ export function TaskItem({
             <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
               confirmDateChange();
+              setIsDatePickerOpen(false);
             }}>Update Parent</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

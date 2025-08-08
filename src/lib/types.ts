@@ -27,4 +27,5 @@ export type Task = {
   icon: LucideIcon;
   tags?: string[];
   activity?: Activity[];
+  createdAt?: any;
 };
