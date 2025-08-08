@@ -28,45 +28,6 @@ const initialTags: Tag[] = [
   { id: 'tag-4', label: 'Personal', color: '#8B5CF6' },
 ];
 
-const initialTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Plan Q3 marketing campaign',
-    description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
-    completed: false,
-    icon: Briefcase,
-    dateRange: { from: new Date(new Date().getFullYear(), new Date().getMonth(), 10), to: new Date(new Date().getFullYear(), new Date().getMonth(), 20) },
-    tags: ['tag-1'],
-    subtasks: [
-      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().getFullYear(), new Date().getMonth(), 11) }, tags:[] },
-      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().getFullYear(), new Date().getMonth(), 15)}, tags:[] },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Grocery shopping',
-    description: 'Buy ingredients for this week\'s meals.',
-    completed: false,
-    icon: ShoppingBasket,
-    dateRange: { to: new Date() },
-    tags: ['tag-4'],
-    subtasks: [],
-  },
-  {
-    id: '3',
-    title: 'Organize home office',
-    description: 'Declutter desk, sort documents, and set up new monitor.',
-    completed: true,
-    icon: Home,
-    dateRange: { to: new Date(new Date().setDate(new Date().getDate() - 2)) },
-    tags: ['tag-4'],
-    subtasks: [
-      { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[] },
-      { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [] },
-    ],
-  },
-];
-
 const icons = [Briefcase, Home, ShoppingBasket];
 
 type FilterType = 'all' | 'done' | 'undone';
@@ -89,7 +50,7 @@ export default function TaskPage() {
         dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 20) },
         tags: ['tag-1'],
         subtasks: [
-          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[] },
+          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[] },
           { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[] },
         ],
       },
@@ -134,14 +95,18 @@ export default function TaskPage() {
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const { toast } = useToast();
 
-  const handleUpdateTag = (tagToUpdate: Tag) => {
-    if (!tagToUpdate.label.trim()) {
+  const handleUpdateTag = () => {
+    if (!editingTag || !editingTag.label.trim()) {
       toast({ title: "Tag name can't be empty", variant: "destructive" });
       return;
     }
-    setTags(tags.map(t => t.id === tagToUpdate.id ? tagToUpdate : t));
+    setTags(tags.map(t => t.id === editingTag.id ? editingTag : t));
     setEditingTag(null);
     toast({ title: "Tag updated!" });
+  }
+
+  const handleDeleteTag = (tagId: string) => {
+    setTags(tags.filter(t => t.id !== tagId));
   }
 
   const handleAddTag = () => {
@@ -204,12 +169,20 @@ export default function TaskPage() {
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-      const toggleChildren = (task: Task, completeStatus: boolean): Task => {
-        return {
-          ...task,
-          completed: completeStatus,
-          subtasks: task.subtasks.map(sub => toggleChildren(sub, completeStatus)),
-        };
+      const toggleChildren = (tasks: Task[], targetId: string, completeStatus: boolean): Task[] => {
+         return tasks.map(task => {
+            if (task.id === targetId) {
+                const updatedTask = { ...task, completed: completeStatus };
+                if (task.subtasks.length > 0) {
+                    updatedTask.subtasks = task.subtasks.map(sub => toggleChildren([sub], sub.id, completeStatus)[0]);
+                }
+                return updatedTask;
+            }
+            if (task.subtasks.length > 0) {
+                return { ...task, subtasks: toggleChildren(task.subtasks, targetId, completeStatus) };
+            }
+            return task;
+        });
       };
   
       const updateParents = (tasks: Task[]): Task[] => {
@@ -226,24 +199,9 @@ export default function TaskPage() {
           return task;
         });
       };
-  
-      const findAndToggle = (tasks: Task[], targetId: string): Task[] => {
-        return tasks.map(task => {
-          if (task.id === targetId) {
-            return toggleChildren(task, completed);
-          }
-          if (task.subtasks.length > 0) {
-            return {
-              ...task,
-              subtasks: findAndToggle(task.subtasks, targetId),
-            };
-          }
-          return task;
-        });
-      };
-  
+      
       setTasks(currentTasks => {
-        const toggledTasks = findAndToggle(currentTasks, id);
+        const toggledTasks = toggleChildren(currentTasks, id, completed);
         return updateParents(toggledTasks);
       });
     }, []);
@@ -439,7 +397,7 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {tags.map(tag => (
-                                            <CommandItem key={tag.id} className="flex justify-between items-center" onSelect={(e) => { e.preventDefault() }}>
+                                            <div key={tag.id} className="flex justify-between items-center py-1.5 px-2 rounded-sm text-sm" >
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span>{tag.label}</span>
@@ -448,11 +406,11 @@ export default function TaskPage() {
                                                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTags(tags.filter(t => t.id !== tag.id))}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteTag(tag.id)}>
                                                         <X className="h-4 w-4" />
                                                     </Button>
                                                 </div>
-                                            </CommandItem>
+                                            </div>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
@@ -529,7 +487,7 @@ export default function TaskPage() {
                 </div>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={() => setEditingTag(null)}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleUpdateTag(editingTag)}>Save Changes</AlertDialogAction>
+                    <AlertDialogAction onClick={handleUpdateTag}>Save Changes</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
