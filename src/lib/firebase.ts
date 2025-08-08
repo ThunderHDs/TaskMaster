@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  "projectId": "taskmaster-l7cq0",
+  "appId": "1:874541974876:web:8613d99f5404eb36d16d99",
+  "storageBucket": "taskmaster-l7cq0.firebasestorage.app",
+  "apiKey": "AIzaSyA46wzvXE6djeLRVSr3BatbSCly43n0oVk",
+  "authDomain": "taskmaster-l7cq0.firebaseapp.com",
+  "measurementId": "",
+  "messagingSenderId": "874541974876"
 };
 
 // Initialize Firebase
