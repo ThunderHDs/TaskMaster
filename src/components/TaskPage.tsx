@@ -192,7 +192,7 @@ export default function TaskPage() {
     const updateRecursively = (taskList: Task[], targetId: string): Task[] => {
       return taskList.map(task => {
         if (task.id === targetId) {
-          const newCompletedStatus = !task.completed;
+          const newCompletedStatus = completed;
           return {
             ...task,
             completed: newCompletedStatus,
@@ -200,11 +200,7 @@ export default function TaskPage() {
           };
         }
         if (task.subtasks && task.subtasks.length > 0) {
-          const newSubtasks = updateRecursively(task.subtasks, targetId);
-          if (newSubtasks !== task.subtasks) {
-            const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
-            return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
-          }
+          return { ...task, subtasks: updateRecursively(task.subtasks, targetId) };
         }
         return task;
       });
@@ -224,7 +220,7 @@ export default function TaskPage() {
     };
 
     setTasks(checkParents(tasksToUpdate));
-  }, [tasks]);
+  }, []);
 
   const handleDelete = useCallback((id: string) => {
     const deleteRecursively = (taskList: Task[], idToDelete: string): Task[] => {
@@ -417,20 +413,36 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {tags.map(tag => (
-                                            <CommandItem key={tag.id} onSelect={() => {}} className="flex justify-between items-center w-full">
+                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md">
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span>{tag.label}</span>
                                                 </div>
                                                 <div className="flex items-center">
-                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); setEditingTag({...tag})}}>
+                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); handleDeleteTag(tag.id)}}>
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                                                              <X className="h-4 w-4" />
+                                                          </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 </div>
-                                            </CommandItem>
+                                            </div>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
@@ -500,7 +512,12 @@ export default function TaskPage() {
                              <Input 
                                 id="tag-color-hex"
                                 value={editingTag.color} 
-                                onChange={(e) => setEditingTag({...editingTag, color: e.target.value})}
+                                onChange={(e) => {
+                                    const newColor = e.target.value;
+                                    if (/^#[0-9A-F]{6}$/i.test(newColor) || newColor === '') {
+                                        setEditingTag({...editingTag, color: newColor});
+                                    }
+                                 }}
                                 className="flex-1"
                             />
                         </div>
