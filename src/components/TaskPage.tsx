@@ -155,10 +155,8 @@ export default function TaskPage() {
       const randomIcon = icons[Math.floor(Math.random() * icons.length)];
       
       let finalDateRange = newTaskDateRange;
-      if (newTaskDateRange && !newTaskDateRange.from && newTaskDateRange.to) {
-        finalDateRange = { from: new Date(), to: newTaskDateRange.to };
-      } else if (!newTaskDateRange) {
-        finalDateRange = { from: new Date() };
+      if (finalDateRange?.to && !finalDateRange.from) {
+        finalDateRange = { from: new Date(), to: finalDateRange.to };
       }
 
       const newTask: Task = {
@@ -261,12 +259,13 @@ export default function TaskPage() {
         subtasks: [],
     };
 
+    let tasksAfterUpdate = tasks;
     if (parentUpdate) {
-        handleUpdate(parentId, parentUpdate);
+        tasksAfterUpdate = updateTaskRecursively(tasks, parentId, task => ({ ...task, ...parentUpdate }))
     }
     
-    setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
-  }, [handleUpdate]);
+    setTasks(updateTaskRecursively(tasksAfterUpdate, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
+  }, [tasks]);
 
   const filteredAndSortedTasks = useMemo(() => {
     let filteredTasks = tasks;
@@ -558,11 +557,7 @@ export default function TaskPage() {
                                 value={editingTag.color} 
                                 onChange={(e) => {
                                     const newColor = e.target.value;
-                                    if (/^#[0-9A-F]{6}$/i.test(newColor)) {
-                                      setEditingTag({...editingTag, color: newColor});
-                                    } else {
-                                      setEditingTag({...editingTag, color: e.target.value});
-                                    }
+                                    setEditingTag({...editingTag, color: newColor});
                                  }}
                                 className="flex-1"
                             />

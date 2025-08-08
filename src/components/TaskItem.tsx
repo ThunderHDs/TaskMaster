@@ -87,19 +87,26 @@ export function TaskItem({
 
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
-    handleDateChange(range, target, true);
+    let newRange = range;
+    if (range?.from && !range.to) {
+        newRange = { from: undefined, to: range.from };
+    }
+    
+    handleDateChange(newRange, target);
+    if (target === 'task') {
+        setEditedTask({ ...editedTask, dateRange: newRange });
+    } else {
+        setNewSubtaskDateRange(newRange);
+    }
   };
 
-  const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask', fromSelection: boolean = false) => {
+  const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     setDateChangeTarget(target);
-    if (fromSelection) {
-      setIsDatePickerOpen(true);
-    }
     setStagedParentUpdate(null);
 
     const relevantParent = target === 'subtask' ? task : parentTask;
 
-    if (!relevantParent || !range) {
+    if (!relevantParent || !range?.from && !range?.to) {
       if (target === 'task') {
         setEditedTask({ ...editedTask, dateRange: range });
       } else {
@@ -133,10 +140,7 @@ export function TaskItem({
   
     if (newDateRange && relevantParent) {
       const parentUpdate: Partial<Task> = {
-        dateRange: {
-          from: relevantParent.dateRange?.from,
-          to: relevantParent.dateRange?.to,
-        },
+        dateRange: { ...relevantParent.dateRange },
       };
   
       const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
@@ -162,7 +166,7 @@ export function TaskItem({
   
     setShowDateWarning(false);
     setNewDateRange(undefined);
-    // Keep dateChangeTarget to handle applying changes on save/add
+    setIsDatePickerOpen(true);
   };
 
   const cancelDateChange = () => {
@@ -170,6 +174,7 @@ export function TaskItem({
     setNewDateRange(undefined);
     setDateChangeTarget(null);
     setStagedParentUpdate(null);
+    setIsDatePickerOpen(true);
   };
 
   const handleSave = () => {
@@ -205,9 +210,7 @@ export function TaskItem({
   const handleAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
       let finalDateRange = newSubtaskDateRange;
-      if (!finalDateRange?.from && !finalDateRange?.to) {
-        finalDateRange = undefined;
-      } else if (!finalDateRange.from) {
+      if (finalDateRange?.to && !finalDateRange.from) {
         finalDateRange.from = new Date();
       }
 
@@ -657,14 +660,19 @@ export function TaskItem({
           onAddSubtasks={handleAddSuggestedSubtasks}
         />
       )}
-      <AlertDialog open={showDateWarning} onOpenChange={setShowDateWarning}>
+      <AlertDialog open={showDateWarning} onOpenChange={(open) => {
+        if (!open) {
+          cancelDateChange();
+        }
+        setShowDateWarning(open);
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Update Parent Task Date?</AlertDialogTitle>
             <AlertDialogDescription>{getDateWarningDescription()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDateChange}>Update Parent</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
