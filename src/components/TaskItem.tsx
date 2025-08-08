@@ -134,8 +134,8 @@ export function TaskItem({
 
     const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
     const parentTo = relevantParent.dateRange?.to ? startOfDay(new Date(relevantParent.dateRange.to)) : null;
-    const rangeFrom = range.from ? startOfDay(new Date(range.from)) : null;
-    const rangeTo = range.to ? startOfDay(new Date(range.to)) : null;
+    const rangeFrom = range?.from ? startOfDay(new Date(range.from)) : null;
+    const rangeTo = range?.to ? startOfDay(new Date(range.to)) : null;
 
     const startConflict = parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom);
     const endConflict = parentTo && rangeTo && isAfter(rangeTo, parentTo);
@@ -460,17 +460,34 @@ export function TaskItem({
             />
             <div className="flex-grow">
               <div className="flex items-start justify-between gap-2">
-                <label
-                  id={`task-label-${task.id}`}
-                  htmlFor={`task-${task.id}`}
-                  className={cn(
-                    'font-medium transition-colors cursor-pointer',
-                    task.completed ? 'line-through text-muted-foreground' : 'text-foreground'
+                <div className="flex-grow flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <label
+                    id={`task-label-${task.id}`}
+                    htmlFor={`task-${task.id}`}
+                    className={cn(
+                      'font-medium transition-colors cursor-pointer',
+                      task.completed ? 'line-through text-muted-foreground' : 'text-foreground'
+                    )}
+                    onClick={() => !isEditing && setIsEditing(true)}
+                  >
+                    {task.title}
+                  </label>
+                   {taskTags.length > 0 && isCompact && (
+                    <div className="flex flex-wrap gap-1">
+                      {taskTags.map(tag => (
+                        <Badge
+                          key={tag.id}
+                          variant="outline"
+                          style={{ borderColor: tag.color, color: tag.color }}
+                          className="text-xs"
+                        >
+                          {tag.label}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-                  onClick={() => !isEditing && setIsEditing(true)}
-                >
-                  {task.title}
-                </label>
+                </div>
+
                 <div className={cn("flex items-center flex-shrink-0", isCompact ? 'gap-0' : 'gap-1')}>
                   {dueDateString && (
                     <span
@@ -517,7 +534,7 @@ export function TaskItem({
                   {task.description}
                 </p>
               )}
-              {taskTags.length > 0 && (
+              {taskTags.length > 0 && !isCompact &&(
                 <div className="flex flex-wrap gap-1 mt-2">
                   {taskTags.map(tag => (
                     <Badge
