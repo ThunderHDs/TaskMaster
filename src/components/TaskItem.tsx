@@ -72,11 +72,11 @@ export function TaskItem({
 
 
   const handleDateChange = (range: DateRange | undefined) => {
-    if (parentTask?.dateRange?.from && range?.from && isBefore(range.from, parentTask.dateRange.from)) {
+    if (parentTask?.dateRange?.from && range?.from && isBefore(range.from, new Date(parentTask.dateRange.from))) {
         setNewDateRange(range);
         setDateWarningType('start');
         setShowDateWarning(true);
-    } else if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, parentTask.dateRange.to)) {
+    } else if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, new Date(parentTask.dateRange.to))) {
       setNewDateRange(range);
       setDateWarningType('end');
       setShowDateWarning(true);
@@ -89,9 +89,9 @@ export function TaskItem({
     if (newDateRange && parentTask && dateWarningType) {
         const parentUpdate: Partial<Task> = {};
         if (dateWarningType === 'start' && newDateRange.from) {
-            parentUpdate.dateRange = { ...parentTask.dateRange, from: newDateRange.from };
+            parentUpdate.dateRange = { from: newDateRange.from, to: parentTask.dateRange?.to };
         } else if (dateWarningType === 'end' && newDateRange.to) {
-            parentUpdate.dateRange = { ...parentTask.dateRange, to: newDateRange.to };
+            parentUpdate.dateRange = { from: parentTask.dateRange?.from, to: newDateRange.to };
         }
         onUpdate(parentTask.id, parentUpdate);
         setEditedTask({ ...editedTask, dateRange: newDateRange });
@@ -184,13 +184,13 @@ export function TaskItem({
   const getDueDateString = () => {
     if (!task.dateRange) return null;
     if (task.dateRange.from && task.dateRange.to) {
-       if (format(task.dateRange.from, 'MMM d') === format(task.dateRange.to, 'MMM d')) {
-        return format(task.dateRange.from, 'MMM d');
+       if (format(new Date(task.dateRange.from), 'MMM d') === format(new Date(task.dateRange.to), 'MMM d')) {
+        return format(new Date(task.dateRange.from), 'MMM d');
        }
-      return `${format(task.dateRange.from, 'MMM d')} - ${format(task.dateRange.to, 'MMM d')}`;
+      return `${format(new Date(task.dateRange.from), 'MMM d')} - ${format(new Date(task.dateRange.to), 'MMM d')}`;
     }
-    if (task.dateRange.from) return `From ${format(task.dateRange.from, 'MMM d')}`;
-    if (task.dateRange.to) return `By ${format(task.dateRange.to, 'MMM d')}`;
+    if (task.dateRange.from) return `From ${format(new Date(task.dateRange.from), 'MMM d')}`;
+    if (task.dateRange.to) return `By ${format(new Date(task.dateRange.to), 'MMM d')}`;
     return null;
   }
   
@@ -257,11 +257,11 @@ export function TaskItem({
                   {editedTask.dateRange?.from ? (
                     editedTask.dateRange.to ? (
                       <>
-                        {format(editedTask.dateRange.from, 'LLL dd, y')} -{' '}
-                        {format(editedTask.dateRange.to, 'LLL dd, y')}
+                        {format(new Date(editedTask.dateRange.from), 'LLL dd, y')} -{' '}
+                        {format(new Date(editedTask.dateRange.to), 'LLL dd, y')}
                       </>
                     ) : (
-                      format(editedTask.dateRange.from, 'LLL dd, y')
+                      format(new Date(editedTask.dateRange.from), 'LLL dd, y')
                     )
                   ) : (
                     <span>Pick a date range</span>
@@ -272,8 +272,8 @@ export function TaskItem({
                 <Calendar
                   initialFocus
                   mode="range"
-                  defaultMonth={editedTask.dateRange?.from}
-                  selected={editedTask.dateRange as DateRange}
+                  defaultMonth={editedTask.dateRange?.from ? new Date(editedTask.dateRange.from) : undefined}
+                  selected={editedTask.dateRange ? { from: editedTask.dateRange.from ? new Date(editedTask.dateRange.from) : undefined, to: editedTask.dateRange.to ? new Date(editedTask.dateRange.to) : undefined } : undefined}
                   onSelect={handleDateChange}
                   numberOfMonths={2}
                 />

@@ -11,8 +11,8 @@ export type Task = {
   title: string;
   description?: string;
   dateRange?: {
-    from?: Date;
-    to?: Date;
+    from?: Date | string;
+    to?: Date | string;
   };
   completed: boolean;
   subtasks: Task[];

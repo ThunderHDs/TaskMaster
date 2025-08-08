@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
+import { Label } from './ui/label';
 
 const initialTags: Tag[] = [
   { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
@@ -71,8 +72,14 @@ const icons = [Briefcase, Home, ShoppingBasket];
 type FilterType = 'all' | 'done' | 'undone';
 
 export default function TaskPage() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [tags, setTags] = useState<Tag[]>(initialTags);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  
+  useEffect(() => {
+    setTasks(initialTasks);
+    setTags(initialTags);
+  }, []);
+
   const [newTagLabel, setNewTagLabel] = useState('');
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -215,8 +222,10 @@ export default function TaskPage() {
     const tasksToSort = [...filteredTasks];
     
     return tasksToSort.sort((a, b) => {
-      const aDate = a.dateRange?.from?.getTime() || a.dateRange?.to?.getTime() || (sortAsc ? Infinity : -Infinity);
-      const bDate = b.dateRange?.from?.getTime() || b.dateRange?.to?.getTime() || (sortAsc ? Infinity : -Infinity);
+      const aDateValue = a.dateRange?.from || a.dateRange?.to;
+      const bDateValue = b.dateRange?.from || b.dateRange?.to;
+      const aDate = aDateValue ? new Date(aDateValue).getTime() : (sortAsc ? Infinity : -Infinity);
+      const bDate = bDateValue ? new Date(bDateValue).getTime() : (sortAsc ? Infinity : -Infinity);
       return sortAsc ? aDate - bDate : bDate - aDate;
     });
   }, [tasks, sortAsc, filter]);
@@ -369,7 +378,7 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {tags.map(tag => (
-                                            <CommandItem key={tag.id} className="flex justify-between items-center" onSelect={(e) => e.preventDefault()}>
+                                            <CommandItem key={tag.id} className="flex justify-between items-center" onSelect={(e) => { e.preventDefault() }}>
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span>{tag.label}</span>
