@@ -35,11 +35,11 @@ const initialTasks: Task[] = [
     description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
     completed: false,
     icon: Briefcase,
-    dateRange: { from: new Date(new Date().setDate(new Date().getDate() - 1)), to: new Date(new Date().setDate(new Date().getDate() + 5)) },
+    dateRange: { from: new Date(new Date().getFullYear(), new Date().getMonth(), 10), to: new Date(new Date().getFullYear(), new Date().getMonth(), 20) },
     tags: ['tag-1'],
     subtasks: [
-      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 1)) }, tags:[] },
-      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 3))}, tags:[] },
+      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().getFullYear(), new Date().getMonth(), 11) }, tags:[] },
+      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().getFullYear(), new Date().getMonth(), 15)}, tags:[] },
     ],
   },
   {
@@ -76,7 +76,48 @@ export default function TaskPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   
   useEffect(() => {
-    setTasks(initialTasks);
+    // This is a workaround to ensure the initial dates are consistent on server and client
+    // to avoid hydration errors.
+    const now = new Date();
+    const initialTasksWithDates = [
+      {
+        id: '1',
+        title: 'Plan Q3 marketing campaign',
+        description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
+        completed: false,
+        icon: Briefcase,
+        dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 20) },
+        tags: ['tag-1'],
+        subtasks: [
+          { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[] },
+          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[] },
+        ],
+      },
+      {
+        id: '2',
+        title: 'Grocery shopping',
+        description: 'Buy ingredients for this week\'s meals.',
+        completed: false,
+        icon: ShoppingBasket,
+        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
+        tags: ['tag-4'],
+        subtasks: [],
+      },
+      {
+        id: '3',
+        title: 'Organize home office',
+        description: 'Declutter desk, sort documents, and set up new monitor.',
+        completed: true,
+        icon: Home,
+        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) },
+        tags: ['tag-4'],
+        subtasks: [
+          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[] },
+          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [] },
+        ],
+      },
+    ];
+    setTasks(initialTasksWithDates);
     setTags(initialTags);
   }, []);
 
@@ -163,55 +204,49 @@ export default function TaskPage() {
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-    const checkParentCompletion = (tasks: Task[]): Task[] => {
-      return tasks.map(task => {
-        if (task.subtasks && task.subtasks.length > 0) {
-          const updatedSubtasks = checkParentCompletion(task.subtasks);
-          const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
-          return {
-            ...task,
-            subtasks: updatedSubtasks,
-            completed: allSubtasksCompleted,
-          };
-        }
-        return task;
+      const toggleChildren = (task: Task, completeStatus: boolean): Task => {
+        return {
+          ...task,
+          completed: completeStatus,
+          subtasks: task.subtasks.map(sub => toggleChildren(sub, completeStatus)),
+        };
+      };
+  
+      const updateParents = (tasks: Task[]): Task[] => {
+        return tasks.map(task => {
+          if (task.subtasks.length > 0) {
+            const updatedSubtasks = updateParents(task.subtasks);
+            const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
+            return {
+              ...task,
+              subtasks: updatedSubtasks,
+              completed: allSubtasksCompleted,
+            };
+          }
+          return task;
+        });
+      };
+  
+      const findAndToggle = (tasks: Task[], targetId: string): Task[] => {
+        return tasks.map(task => {
+          if (task.id === targetId) {
+            return toggleChildren(task, completed);
+          }
+          if (task.subtasks.length > 0) {
+            return {
+              ...task,
+              subtasks: findAndToggle(task.subtasks, targetId),
+            };
+          }
+          return task;
+        });
+      };
+  
+      setTasks(currentTasks => {
+        const toggledTasks = findAndToggle(currentTasks, id);
+        return updateParents(toggledTasks);
       });
-    };
-
-    const toggleAndUpdate = (tasks: Task[]): Task[] => {
-      // First, toggle the specified task and its children
-      let toggled = false;
-      const newTasks = tasks.map(task => {
-        if (task.id === id) {
-          toggled = true;
-          const toggleChildren = (t: Task, c: boolean): Task => ({
-            ...t,
-            completed: c,
-            subtasks: t.subtasks.map(st => toggleChildren(st, c))
-          });
-          return toggleChildren(task, completed);
-        }
-        if (task.subtasks && task.subtasks.length > 0) {
-          const { tasks: updatedSubtasks, toggled: subToggled } = (()=>{
-            const res = toggleAndUpdate(task.subtasks);
-            let toggled = false;
-            if(res.some((t,i) => t.completed !== task.subtasks[i].completed)) toggled = true;
-            return {tasks: res, toggled}
-          })();
-          if (subToggled) toggled = true;
-          return { ...task, subtasks: updatedSubtasks };
-        }
-        return task;
-      });
-
-      if (!toggled) return tasks;
-
-      // After toggling, re-evaluate parent completion status from the root
-      return checkParentCompletion(newTasks);
-    };
-
-    setTasks(prevTasks => toggleAndUpdate(prevTasks));
-  }, []);
+    }, []);
 
   const handleDelete = useCallback((id: string) => {
     const deleteRecursively = (taskList: Task[], idToDelete: string): Task[] => {
@@ -410,13 +445,9 @@ export default function TaskPage() {
                                                     <span>{tag.label}</span>
                                                 </div>
                                                 <div className="flex items-center">
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
-                                                                <Edit className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                    </AlertDialog>
+                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTags(tags.filter(t => t.id !== tag.id))}>
                                                         <X className="h-4 w-4" />
                                                     </Button>
