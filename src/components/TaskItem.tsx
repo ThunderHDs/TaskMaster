@@ -74,12 +74,11 @@ export function TaskItem({
   const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
   
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+    let newRange = range;
     if (range?.from && !range.to) {
-        const newRange = { from: new Date(), to: range.from };
-        handleDateChange(newRange, target);
-    } else {
-        handleDateChange(range, target);
+        newRange = { from: undefined, to: range.from };
     }
+    handleDateChange(newRange, target);
   };
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
@@ -175,10 +174,15 @@ export function TaskItem({
 
   const handleAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
+      let finalDateRange = newSubtaskDateRange;
+      if (!finalDateRange?.from && !finalDateRange?.to) {
+          finalDateRange = { from: new Date() };
+      }
+
       onAddSubtask(task.id, { 
         title: newSubtaskTitle.trim(),
         description: newSubtaskDescription.trim() || undefined,
-        dateRange: newSubtaskDateRange,
+        dateRange: finalDateRange,
         tags: newSubtaskTags,
         completed: false
       });
@@ -189,7 +193,7 @@ export function TaskItem({
 
   const handleAddSuggestedSubtasks = (subtasks: string[]) => {
     subtasks.forEach((title) => {
-      onAddSubtask(task.id, { title, completed: false });
+      onAddSubtask(task.id, { title, completed: false, dateRange: { from: new Date() } });
     });
     setIsExpanded(true);
   };
@@ -311,6 +315,8 @@ export function TaskItem({
                     ) : (
                       format(new Date(editedTask.dateRange.from), 'LLL dd, y')
                     )
+                  ) : editedTask.dateRange?.to ? (
+                     `By ${format(new Date(editedTask.dateRange.to), 'LLL dd, y')}`
                   ) : (
                     <span>Pick a date range</span>
                   )}
@@ -484,6 +490,8 @@ export function TaskItem({
                                                 ) : (
                                                     format(newSubtaskDateRange.from, 'LLL dd, y')
                                                 )
+                                            ) : newSubtaskDateRange?.to ? (
+                                                `By ${format(newSubtaskDateRange.to, 'LLL dd, y')}`
                                             ) : (
                                                 <span>Pick a date range</span>
                                             )}

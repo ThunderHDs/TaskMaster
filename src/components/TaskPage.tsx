@@ -144,7 +144,7 @@ export default function TaskPage() {
   
   const handleNewTaskDateChange = (range: DateRange | undefined) => {
     if (range?.from && !range.to) {
-        setNewTaskDateRange({ from: new Date(), to: range.from });
+        setNewTaskDateRange({ from: undefined, to: range.from });
     } else {
         setNewTaskDateRange(range);
     }
@@ -153,6 +153,12 @@ export default function TaskPage() {
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
       const randomIcon = icons[Math.floor(Math.random() * icons.length)];
+      
+      let finalDateRange = newTaskDateRange;
+      if (!finalDateRange?.from && !finalDateRange?.to) {
+          finalDateRange = { from: new Date() };
+      }
+
       const newTask: Task = {
         id: crypto.randomUUID(),
         title: newTaskTitle.trim(),
@@ -161,7 +167,7 @@ export default function TaskPage() {
         icon: randomIcon,
         subtasks: [],
         tags: newTaskTags,
-        dateRange: newTaskDateRange
+        dateRange: finalDateRange
       };
       setTasks((prevTasks) => [newTask, ...prevTasks]);
       resetNewTaskForm();
@@ -330,6 +336,8 @@ export default function TaskPage() {
                                         ) : (
                                             format(newTaskDateRange.from, 'LLL dd, y')
                                         )
+                                    ) : newTaskDateRange?.to ? (
+                                        `By ${format(newTaskDateRange.to, 'LLL dd, y')}`
                                     ) : (
                                         <span>Pick a date range</span>
                                     )}
@@ -434,12 +442,12 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {filteredTags.map(tag => (
-                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md">
+                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group">
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span className="text-sm">{tag.label}</span>
                                                 </div>
-                                                <div className="flex items-center">
+                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
