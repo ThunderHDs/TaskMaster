@@ -17,7 +17,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { format, isAfter, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,16 @@ import {
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { DateRange } from 'react-day-picker';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 type TaskItemProps = {
   task: Task;
@@ -52,40 +61,42 @@ export function TaskItem({
   onDelete,
   onAddSubtask,
   parentTask,
-  level = 0
+  level = 0,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
-  
+
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskDescription, setNewSubtaskDescription] = useState('');
   const [newSubtaskDateRange, setNewSubtaskDateRange] = useState<DateRange | undefined>();
   const [newSubtaskTags, setNewSubtaskTags] = useState<string[]>([]);
-  
+
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [showSubtaskOptions, setShowSubtaskOptions] = useState(false);
-  
+
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSubtaskSuggestions, setShowSubtaskSuggestions] = useState(false);
-  
+
   const [showDateWarning, setShowDateWarning] = useState(false);
   const [newDateRange, setNewDateRange] = useState<DateRange | undefined>(undefined);
-  const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
   const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
-  
+
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     let newRange = range;
     if (range?.from && !range.to) {
-        newRange = { from: undefined, to: range.from };
+      newRange = { from: undefined, to: range.from };
     }
-    handleDateChange(newRange, target);
+    handleDateChange(newRange, target, true);
   };
 
-  const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+  const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask', fromSelection: boolean = false) => {
     setDateChangeTarget(target);
-    
-    // For new subtasks, the parent is the current task.
-    // For editing existing tasks/subtasks, the parent is the one passed in `parentTask`.
+    if (fromSelection) {
+      setIsDatePickerOpen(true);
+    }
+
     const relevantParent = target === 'subtask' ? task : parentTask;
 
     if (!relevantParent || !range) {
@@ -102,13 +113,11 @@ export function TaskItem({
     const rangeFrom = range.from ? startOfDay(new Date(range.from)) : null;
     const rangeTo = range.to ? startOfDay(new Date(range.to)) : null;
 
-    if (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) {
+    const startConflict = parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom);
+    const endConflict = parentTo && rangeTo && isAfter(rangeTo, parentTo);
+
+    if (startConflict || endConflict) {
       setNewDateRange(range);
-      setDateWarningType('start');
-      setShowDateWarning(true);
-    } else if (parentTo && rangeTo && isAfter(rangeTo, parentTo)) {
-      setNewDateRange(range);
-      setDateWarningType('end');
       setShowDateWarning(true);
     } else {
       if (target === 'task') {
@@ -118,38 +127,47 @@ export function TaskItem({
       }
     }
   };
-  
+
   const confirmDateChange = () => {
     const relevantParent = dateChangeTarget === 'subtask' ? task : parentTask;
 
-    if (newDateRange && relevantParent && dateWarningType) {
-        const parentUpdate: Partial<Task> = { dateRange: { from: relevantParent.dateRange?.from, to: relevantParent.dateRange?.to } };
+    if (newDateRange && relevantParent) {
+      const parentUpdate: Partial<Task> = {
+        dateRange: {
+          from: relevantParent.dateRange?.from,
+          to: relevantParent.dateRange?.to,
+        },
+      };
 
-        if (dateWarningType === 'start' && newDateRange.from) {
-            parentUpdate.dateRange!.from = newDateRange.from;
-        } else if (dateWarningType === 'end' && newDateRange.to) {
-            parentUpdate.dateRange!.to = newDateRange.to;
-        }
+      const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
+      const parentTo = relevantParent.dateRange?.to ? startOfDay(new Date(relevantParent.dateRange.to)) : null;
+      const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
+      const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
 
-        onUpdate(relevantParent.id, parentUpdate);
-        
-        if (dateChangeTarget === 'task') {
-            setEditedTask({ ...editedTask, dateRange: newDateRange });
-        } else if (dateChangeTarget === 'subtask') {
-            setNewSubtaskDateRange(newDateRange);
-        }
+      if (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) {
+        parentUpdate.dateRange!.from = newDateRange.from;
+      }
+      if (parentTo && rangeTo && isAfter(rangeTo, parentTo)) {
+        parentUpdate.dateRange!.to = newDateRange.to;
+      }
+
+      onUpdate(relevantParent.id, parentUpdate);
+
+      if (dateChangeTarget === 'task') {
+        setEditedTask({ ...editedTask, dateRange: newDateRange });
+      } else if (dateChangeTarget === 'subtask') {
+        setNewSubtaskDateRange(newDateRange);
+      }
     }
-    
+
     setShowDateWarning(false);
     setNewDateRange(undefined);
-    setDateWarningType(null);
     setDateChangeTarget(null);
   };
 
   const cancelDateChange = () => {
     setShowDateWarning(false);
     setNewDateRange(undefined);
-    setDateWarningType(null);
     setDateChangeTarget(null);
   };
 
@@ -170,21 +188,21 @@ export function TaskItem({
     setNewSubtaskTags([]);
     setIsAddingSubtask(false);
     setShowSubtaskOptions(false);
-  }
+  };
 
   const handleAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
       let finalDateRange = newSubtaskDateRange;
       if (!finalDateRange?.from && !finalDateRange?.to) {
-          finalDateRange = { from: new Date() };
+        finalDateRange = undefined;
       }
 
-      onAddSubtask(task.id, { 
+      onAddSubtask(task.id, {
         title: newSubtaskTitle.trim(),
         description: newSubtaskDescription.trim() || undefined,
         dateRange: finalDateRange,
         tags: newSubtaskTags,
-        completed: false
+        completed: false,
       });
       resetNewSubtaskForm();
       setIsExpanded(true);
@@ -192,8 +210,8 @@ export function TaskItem({
   };
 
   const handleAddSuggestedSubtasks = (subtasks: string[]) => {
-    subtasks.forEach((title) => {
-      onAddSubtask(task.id, { title, completed: false, dateRange: { from: new Date() } });
+    subtasks.forEach(title => {
+      onAddSubtask(task.id, { title, completed: false });
     });
     setIsExpanded(true);
   };
@@ -205,49 +223,70 @@ export function TaskItem({
 
   const handleCancelAddSubtask = () => {
     resetNewSubtaskForm();
-  }
+  };
 
   const handleNewSubtaskTagToggle = (tagId: string) => {
-    setNewSubtaskTags(prev => 
-      prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]
-    );
+    setNewSubtaskTags(prev => (prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]));
   };
 
   const calculateProgress = () => {
     if (!task.subtasks || task.subtasks.length === 0) {
       return task.completed ? 100 : 0;
     }
-    const completedSubtasks = task.subtasks.filter((subtask) => subtask.completed).length;
+    const completedSubtasks = task.subtasks.filter(subtask => subtask.completed).length;
     return (completedSubtasks / task.subtasks.length) * 100;
   };
 
   const handleTagToggle = (tagId: string) => {
     const newTags = editedTask.tags?.includes(tagId)
-      ? editedTask.tags.filter((t) => t !== tagId)
+      ? editedTask.tags.filter(t => t !== tagId)
       : [...(editedTask.tags || []), tagId];
     setEditedTask({ ...editedTask, tags: newTags });
   };
 
   const progress = calculateProgress();
   const TaskIcon = task.icon;
-  const taskTags = allTags.filter((tag) => task.tags?.includes(tag.id));
+  const taskTags = allTags.filter(tag => task.tags?.includes(tag.id));
 
   const getDueDateString = () => {
     if (!task.dateRange) return null;
     if (task.dateRange.from && task.dateRange.to) {
-       if (format(new Date(task.dateRange.from), 'MMM d') === format(new Date(task.dateRange.to), 'MMM d')) {
+      if (format(new Date(task.dateRange.from), 'MMM d') === format(new Date(task.dateRange.to), 'MMM d')) {
         return format(new Date(task.dateRange.from), 'MMM d');
-       }
+      }
       return `${format(new Date(task.dateRange.from), 'MMM d')} - ${format(new Date(task.dateRange.to), 'MMM d')}`;
     }
     if (task.dateRange.from) return `From ${format(new Date(task.dateRange.from), 'MMM d')}`;
     if (task.dateRange.to) return `By ${format(new Date(task.dateRange.to), 'MMM d')}`;
     return null;
-  }
-  
+  };
+
   const dueDateString = getDueDateString();
   const isOverdue = task.dateRange?.to ? new Date() > new Date(task.dateRange.to) && !task.completed : false;
   const maxNestingLevel = 2;
+
+  const getDateWarningDescription = () => {
+    if (!newDateRange || !parentTask) return '';
+
+    const parentFrom = parentTask.dateRange?.from ? startOfDay(new Date(parentTask.dateRange.from)) : null;
+    const parentTo = parentTask.dateRange?.to ? startOfDay(new Date(parentTask.dateRange.to)) : null;
+    const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
+    const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
+
+    const startConflict = parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom);
+    const endConflict = parentTo && rangeTo && isAfter(rangeTo, parentTo);
+
+    if (startConflict && endConflict) {
+      return "The selected dates are outside the parent task's date range. Would you like to expand the parent task's dates to match?";
+    }
+    if (startConflict) {
+      return "The selected start date is before the parent task's start date. Would you like to update the parent task's start date to match?";
+    }
+    if (endConflict) {
+      return "The selected end date is after the parent task's end date. Would you like to extend the parent task's end date to match?";
+    }
+    return '';
+  };
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
@@ -256,14 +295,14 @@ export function TaskItem({
           <div className="flex flex-col gap-3">
             <Input
               value={editedTask.title}
-              onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
+              onChange={e => setEditedTask({ ...editedTask, title: e.target.value })}
               className="text-lg font-semibold"
               aria-label="Edit task title"
             />
             <div className="relative">
               <Textarea
                 value={editedTask.description || ''}
-                onChange={(e) => setEditedTask({ ...editedTask, description: e.target.value })}
+                onChange={e => setEditedTask({ ...editedTask, description: e.target.value })}
                 placeholder="Add a description or comment..."
                 aria-label="Edit task description"
                 rows={2}
@@ -281,7 +320,7 @@ export function TaskItem({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {allTags.map((tag) => (
+              {allTags.map(tag => (
                 <Button
                   key={tag.id}
                   variant={editedTask.tags?.includes(tag.id) ? 'secondary' : 'outline'}
@@ -316,7 +355,7 @@ export function TaskItem({
                       format(new Date(editedTask.dateRange.from), 'LLL dd, y')
                     )
                   ) : editedTask.dateRange?.to ? (
-                     `By ${format(new Date(editedTask.dateRange.to), 'LLL dd, y')}`
+                    `By ${format(new Date(editedTask.dateRange.to), 'LLL dd, y')}`
                   ) : (
                     <span>Pick a date range</span>
                   )}
@@ -327,8 +366,15 @@ export function TaskItem({
                   initialFocus
                   mode="range"
                   defaultMonth={editedTask.dateRange?.from ? new Date(editedTask.dateRange.from) : undefined}
-                  selected={editedTask.dateRange ? { from: editedTask.dateRange.from ? new Date(editedTask.dateRange.from) : undefined, to: editedTask.dateRange.to ? new Date(editedTask.dateRange.to) : undefined } : undefined}
-                  onSelect={(range) => handleDateChange(range, 'task')}
+                  selected={
+                    editedTask.dateRange
+                      ? {
+                          from: editedTask.dateRange.from ? new Date(editedTask.dateRange.from) : undefined,
+                          to: editedTask.dateRange.to ? new Date(editedTask.dateRange.to) : undefined,
+                        }
+                      : undefined
+                  }
+                  onSelect={range => handleDateChange(range, 'task')}
                   numberOfMonths={2}
                 />
               </PopoverContent>
@@ -345,7 +391,7 @@ export function TaskItem({
             <Checkbox
               id={`task-${task.id}`}
               checked={task.completed}
-              onCheckedChange={(checked) => onToggleComplete(task.id, !!checked)}
+              onCheckedChange={checked => onToggleComplete(task.id, !!checked)}
               className="mt-1"
               aria-labelledby={`task-label-${task.id}`}
             />
@@ -402,12 +448,17 @@ export function TaskItem({
                   {task.description}
                 </p>
               )}
-               {taskTags.length > 0 && (
+              {taskTags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {taskTags.map(tag => (
-                     <Badge key={tag.id} variant="outline" style={{ borderColor: tag.color, color: tag.color }} className="text-xs">
-                       {tag.label}
-                     </Badge>
+                    <Badge
+                      key={tag.id}
+                      variant="outline"
+                      style={{ borderColor: tag.color, color: tag.color }}
+                      className="text-xs"
+                    >
+                      {tag.label}
+                    </Badge>
                   ))}
                 </div>
               )}
@@ -441,7 +492,7 @@ export function TaskItem({
 
             {isExpanded && (
               <div className="flex flex-col gap-2">
-                {task.subtasks.map((subtask) => (
+                {task.subtasks.map(subtask => (
                   <TaskItem
                     key={subtask.id}
                     task={subtask}
@@ -459,92 +510,106 @@ export function TaskItem({
                   <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/50">
                     <Input
                       value={newSubtaskTitle}
-                      onChange={(e) => {
+                      onChange={e => {
                         setNewSubtaskTitle(e.target.value);
-                        if(e.target.value.length > 0 && !showSubtaskOptions) {
-                            setShowSubtaskOptions(true);
+                        if (e.target.value.length > 0 && !showSubtaskOptions) {
+                          setShowSubtaskOptions(true);
                         } else if (e.target.value.length === 0) {
-                            setShowSubtaskOptions(false);
+                          setShowSubtaskOptions(false);
                         }
                       }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                      onKeyDown={e => e.key === 'Enter' && handleAddSubtask()}
                       placeholder="New subtask title"
                       autoFocus
                     />
                     {showSubtaskOptions && (
-                        <div className="space-y-3 pt-2">
-                             <Textarea 
-                                value={newSubtaskDescription}
-                                onChange={e => setNewSubtaskDescription(e.target.value)}
-                                placeholder="Add description..."
-                                rows={2}
-                            />
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant={'outline'} size="sm" className={cn('w-full justify-start text-left font-normal text-xs', !newSubtaskDateRange && 'text-muted-foreground')}>
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {newSubtaskDateRange?.from ? (
-                                                newSubtaskDateRange.to ? (
-                                                    <>{format(newSubtaskDateRange.from, 'LLL dd')} - {format(newSubtaskDateRange.to, 'LLL dd')}</>
-                                                ) : (
-                                                    format(newSubtaskDateRange.from, 'LLL dd, y')
-                                                )
-                                            ) : newSubtaskDateRange?.to ? (
-                                                `By ${format(newSubtaskDateRange.to, 'LLL dd, y')}`
-                                            ) : (
-                                                <span>Pick a date range</span>
-                                            )}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            initialFocus
-                                            mode="range"
-                                            defaultMonth={newSubtaskDateRange?.from}
-                                            selected={newSubtaskDateRange}
-                                            onSelect={(range) => handleDateSelection(range, 'subtask')}
-                                            numberOfMonths={1}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
+                      <div className="space-y-3 pt-2">
+                        <Textarea
+                          value={newSubtaskDescription}
+                          onChange={e => setNewSubtaskDescription(e.target.value)}
+                          placeholder="Add description..."
+                          rows={2}
+                        />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant={'outline'}
+                                size="sm"
+                                className={cn(
+                                  'w-full justify-start text-left font-normal text-xs',
+                                  !newSubtaskDateRange && 'text-muted-foreground'
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {newSubtaskDateRange?.from ? (
+                                  newSubtaskDateRange.to ? (
+                                    <>
+                                      {format(newSubtaskDateRange.from, 'LLL dd')} -{' '}
+                                      {format(newSubtaskDateRange.to, 'LLL dd')}
+                                    </>
+                                  ) : (
+                                    format(newSubtaskDateRange.from, 'LLL dd, y')
+                                  )
+                                ) : newSubtaskDateRange?.to ? (
+                                  `By ${format(newSubtaskDateRange.to, 'LLL dd, y')}`
+                                ) : (
+                                  <span>Pick a date range</span>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={newSubtaskDateRange?.from}
+                                selected={newSubtaskDateRange}
+                                onSelect={range => handleDateSelection(range, 'subtask')}
+                                numberOfMonths={1}
+                              />
+                            </PopoverContent>
+                          </Popover>
 
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant={'outline'} size="sm" className="w-full justify-start text-left font-normal text-xs">
-                                            <TagIcon className="mr-2 h-4 w-4" />
-                                            <span>{newSubtaskTags.length > 0 ? `${newSubtaskTags.length} tags` : 'Add tags'}</span>
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-2">
-                                        <div className="flex flex-wrap gap-1 max-w-xs">
-                                            {allTags.map(tag => (
-                                                <Badge
-                                                    key={tag.id}
-                                                    variant={newSubtaskTags.includes(tag.id) ? 'secondary' : 'outline'}
-                                                    onClick={() => handleNewSubtaskTagToggle(tag.id)}
-                                                    style={{
-                                                        backgroundColor: newSubtaskTags.includes(tag.id) ? tag.color : undefined,
-                                                        borderColor: tag.color,
-                                                        color: newSubtaskTags.includes(tag.id) ? 'white' : tag.color,
-                                                        cursor: 'pointer'
-                                                    }}
-                                                    className="text-xs"
-                                                >
-                                                    {tag.label}
-                                                </Badge>
-                                            ))}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant={'outline'}
+                                size="sm"
+                                className="w-full justify-start text-left font-normal text-xs"
+                              >
+                                <TagIcon className="mr-2 h-4 w-4" />
+                                <span>{newSubtaskTags.length > 0 ? `${newSubtaskTags.length} tags` : 'Add tags'}</span>
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-2">
+                              <div className="flex flex-wrap gap-1 max-w-xs">
+                                {allTags.map(tag => (
+                                  <Badge
+                                    key={tag.id}
+                                    variant={newSubtaskTags.includes(tag.id) ? 'secondary' : 'outline'}
+                                    onClick={() => handleNewSubtaskTagToggle(tag.id)}
+                                    style={{
+                                      backgroundColor: newSubtaskTags.includes(tag.id) ? tag.color : undefined,
+                                      borderColor: tag.color,
+                                      color: newSubtaskTags.includes(tag.id) ? 'white' : tag.color,
+                                      cursor: 'pointer',
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    {tag.label}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
+                      </div>
                     )}
                     <div className="flex gap-2 items-center justify-end">
                       <Button variant="ghost" onClick={handleCancelAddSubtask} size="sm">
                         Cancel
                       </Button>
-                       <Button onClick={handleAddSubtask} size="sm" disabled={!newSubtaskTitle.trim()}>
+                      <Button onClick={handleAddSubtask} size="sm" disabled={!newSubtaskTitle.trim()}>
                         Add
                       </Button>
                     </div>
@@ -572,22 +637,18 @@ export function TaskItem({
           onAddSubtasks={handleAddSuggestedSubtasks}
         />
       )}
-       <AlertDialog open={showDateWarning} onOpenChange={setShowDateWarning}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Update Parent Task Date?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        {dateWarningType === 'end'
-                        ? "The selected end date for this subtask is after the parent task's end date. Would you like to extend the parent task's end date to match?"
-                        : "The selected start date for this subtask is before the parent task's start date. Would you like to update the parent task's start date to match?"}
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={confirmDateChange}>Update Parent</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+      <AlertDialog open={showDateWarning} onOpenChange={setShowDateWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Parent Task Date?</AlertDialogTitle>
+            <AlertDialogDescription>{getDateWarningDescription()}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDateChange}>Update Parent</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
