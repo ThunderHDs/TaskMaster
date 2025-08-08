@@ -5,7 +5,7 @@ import { Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Palette } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -37,8 +37,8 @@ const initialTasks: Task[] = [
     dateRange: { from: new Date(new Date().setDate(new Date().getDate() + 2)), to: new Date(new Date().setDate(new Date().getDate() + 5)) },
     tags: ['tag-1'],
     subtasks: [
-      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 1)) } },
-      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 3))} },
+      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 1)) }, tags:[] },
+      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 3))}, tags:[] },
     ],
   },
   {
@@ -60,8 +60,8 @@ const initialTasks: Task[] = [
     dateRange: { to: new Date(new Date().setDate(new Date().getDate() - 2)) },
     tags: ['tag-4'],
     subtasks: [
-      { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [] },
-      { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [] },
+      { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[] },
+      { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [] },
     ],
   },
 ];
@@ -200,7 +200,6 @@ export default function TaskPage() {
         id: crypto.randomUUID(),
         icon: randomIcon,
         subtasks: [],
-        tags: []
     };
     setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
   }, []);

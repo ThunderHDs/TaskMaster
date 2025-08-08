@@ -8,6 +8,7 @@ import {
   MoreVertical,
   Plus,
   Sparkles,
+  Tag as TagIcon,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -38,7 +39,7 @@ type TaskItemProps = {
   onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>) => void;
   onToggleComplete: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
-  onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks' | 'tags'>) => void;
+  onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>) => void;
   parentTask?: Task;
 };
 
@@ -53,8 +54,15 @@ export function TaskItem({
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
+  
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newSubtaskDescription, setNewSubtaskDescription] = useState('');
+  const [newSubtaskDateRange, setNewSubtaskDateRange] = useState<DateRange | undefined>();
+  const [newSubtaskTags, setNewSubtaskTags] = useState<string[]>([]);
+  
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [showSubtaskOptions, setShowSubtaskOptions] = useState(false);
+  
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSubtaskSuggestions, setShowSubtaskSuggestions] = useState(false);
   const [showDateWarning, setShowDateWarning] = useState(false);
@@ -93,11 +101,25 @@ export function TaskItem({
     setIsEditing(false);
   };
 
+  const resetNewSubtaskForm = () => {
+    setNewSubtaskTitle('');
+    setNewSubtaskDescription('');
+    setNewSubtaskDateRange(undefined);
+    setNewSubtaskTags([]);
+    setIsAddingSubtask(false);
+    setShowSubtaskOptions(false);
+  }
+
   const handleAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
-      onAddSubtask(task.id, { title: newSubtaskTitle.trim(), completed: false });
-      setNewSubtaskTitle('');
-      setIsAddingSubtask(false);
+      onAddSubtask(task.id, { 
+        title: newSubtaskTitle.trim(),
+        description: newSubtaskDescription.trim() || undefined,
+        dateRange: newSubtaskDateRange,
+        tags: newSubtaskTags,
+        completed: false
+      });
+      resetNewSubtaskForm();
       setIsExpanded(true);
     }
   };
@@ -112,6 +134,16 @@ export function TaskItem({
   const handleCancelEdit = () => {
     setEditedTask({ ...task });
     setIsEditing(false);
+  };
+
+  const handleCancelAddSubtask = () => {
+    resetNewSubtaskForm();
+  }
+
+  const handleNewSubtaskTagToggle = (tagId: string) => {
+    setNewSubtaskTags(prev => 
+      prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]
+    );
   };
 
   const calculateProgress = () => {
@@ -319,7 +351,7 @@ export function TaskItem({
           </div>
         )}
 
-        {task.subtasks && (task.subtasks.length > 0 || isAddingSubtask || (isExpanded && !isAddingSubtask)) && (
+        {task.subtasks && (
           <div className="pl-8 pt-2 space-y-2">
             {task.subtasks.length > 0 && (
               <button
@@ -338,38 +370,111 @@ export function TaskItem({
             )}
 
             {isExpanded && (
-              <>
-                <div className="flex flex-col gap-2">
-                  {task.subtasks.map((subtask) => (
-                    <TaskItem
-                      key={subtask.id}
-                      task={subtask}
-                      allTags={allTags}
-                      onUpdate={onUpdate}
-                      onToggleComplete={onToggleComplete}
-                      onDelete={onDelete}
-                      onAddSubtask={onAddSubtask}
-                      parentTask={task}
-                    />
-                  ))}
-                </div>
+              <div className="flex flex-col gap-2">
+                {task.subtasks.map((subtask) => (
+                  <TaskItem
+                    key={subtask.id}
+                    task={subtask}
+                    allTags={allTags}
+                    onUpdate={onUpdate}
+                    onToggleComplete={onToggleComplete}
+                    onDelete={onDelete}
+                    onAddSubtask={onAddSubtask}
+                    parentTask={task}
+                  />
+                ))}
 
                 {isAddingSubtask ? (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/50">
                     <Input
                       value={newSubtaskTitle}
-                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      onChange={(e) => {
+                        setNewSubtaskTitle(e.target.value);
+                        if(e.target.value.length > 0 && !showSubtaskOptions) {
+                            setShowSubtaskOptions(true);
+                        } else if (e.target.value.length === 0) {
+                            setShowSubtaskOptions(false);
+                        }
+                      }}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
                       placeholder="New subtask title"
                       autoFocus
-                      className="h-9"
                     />
-                    <Button onClick={handleAddSubtask} size="sm">
-                      Add
-                    </Button>
-                    <Button variant="ghost" onClick={() => setIsAddingSubtask(false)} size="sm">
-                      Cancel
-                    </Button>
+                    {showSubtaskOptions && (
+                        <div className="space-y-3 pt-2">
+                             <Textarea 
+                                value={newSubtaskDescription}
+                                onChange={e => setNewSubtaskDescription(e.target.value)}
+                                placeholder="Add description..."
+                                rows={2}
+                            />
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={'outline'} size="sm" className={cn('w-full justify-start text-left font-normal text-xs', !newSubtaskDateRange && 'text-muted-foreground')}>
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {newSubtaskDateRange?.from ? (
+                                                newSubtaskDateRange.to ? (
+                                                    <>{format(newSubtaskDateRange.from, 'LLL dd')} - {format(newSubtaskDateRange.to, 'LLL dd')}</>
+                                                ) : (
+                                                    format(newSubtaskDateRange.from, 'LLL dd, y')
+                                                )
+                                            ) : (
+                                                <span>Pick a date range</span>
+                                            )}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            initialFocus
+                                            mode="range"
+                                            defaultMonth={newSubtaskDateRange?.from}
+                                            selected={newSubtaskDateRange}
+                                            onSelect={setNewSubtaskDateRange}
+                                            numberOfMonths={1}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={'outline'} size="sm" className="w-full justify-start text-left font-normal text-xs">
+                                            <TagIcon className="mr-2 h-4 w-4" />
+                                            <span>{newSubtaskTags.length > 0 ? `${newSubtaskTags.length} tags` : 'Add tags'}</span>
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-2">
+                                        <div className="flex flex-wrap gap-1 max-w-xs">
+                                            {allTags.map(tag => (
+                                                <Badge
+                                                    key={tag.id}
+                                                    variant={newSubtaskTags.includes(tag.id) ? 'secondary' : 'outline'}
+                                                    onClick={() => handleNewSubtaskTagToggle(tag.id)}
+                                                    style={{
+                                                        backgroundColor: newSubtaskTags.includes(tag.id) ? tag.color : undefined,
+                                                        borderColor: tag.color,
+                                                        color: newSubtaskTags.includes(tag.id) ? 'white' : tag.color,
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    className="text-xs"
+                                                >
+                                                    {tag.label}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex gap-2 items-center justify-end">
+                      <Button variant="ghost" onClick={handleCancelAddSubtask} size="sm">
+                        Cancel
+                      </Button>
+                       <Button onClick={handleAddSubtask} size="sm" disabled={!newSubtaskTitle.trim()}>
+                        Add
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <Button
@@ -381,7 +486,7 @@ export function TaskItem({
                     Add subtask
                   </Button>
                 )}
-              </>
+              </div>
             )}
           </div>
         )}
