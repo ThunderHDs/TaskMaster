@@ -35,7 +35,7 @@ const initialTasks: Task[] = [
     description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
     completed: false,
     icon: Briefcase,
-    dateRange: { from: new Date(new Date().setDate(new Date().getDate() + 2)), to: new Date(new Date().setDate(new Date().getDate() + 5)) },
+    dateRange: { from: new Date(new Date().setDate(new Date().getDate() - 1)), to: new Date(new Date().setDate(new Date().getDate() + 5)) },
     tags: ['tag-1'],
     subtasks: [
       { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 1)) }, tags:[] },
