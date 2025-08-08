@@ -4,7 +4,7 @@ import type { Task } from '@/lib/types';
 import { useState, useMemo } from 'react';
 import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format } from 'date-fns';
+import { addDays, format, isWithinInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
 
@@ -27,8 +27,25 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
 
   const tasksByDate = useMemo(() => {
     return allTasks.reduce((acc, task) => {
-      if (task.dueDate) {
-        const dateKey = format(task.dueDate, 'yyyy-MM-dd');
+      if (task.dateRange?.from) {
+        const from = new Date(task.dateRange.from);
+        from.setUTCHours(0, 0, 0, 0);
+        const to = task.dateRange.to ? new Date(task.dateRange.to) : from;
+        to.setUTCHours(0,0,0,0);
+        
+        let currentDate = from;
+        while (currentDate <= to) {
+          const dateKey = format(currentDate, 'yyyy-MM-dd');
+          if (!acc[dateKey]) {
+            acc[dateKey] = [];
+          }
+          acc[dateKey].push(task);
+          currentDate = addDays(currentDate, 1);
+        }
+      } else if(task.dateRange?.to) {
+        const to = new Date(task.dateRange.to);
+        to.setUTCHours(0,0,0,0);
+        const dateKey = format(to, 'yyyy-MM-dd');
         if (!acc[dateKey]) {
           acc[dateKey] = [];
         }
@@ -59,7 +76,7 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
         {tasksForDay.length > 0 && (
           <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex space-x-px">
             {tasksForDay.slice(0, 3).map((task, i) => (
-              <div key={i} className={cn("h-1.5 w-1.5 rounded-full", task.completed ? "bg-success" : "bg-primary")} />
+              <div key={`${task.id}-${i}`} className={cn("h-1.5 w-1.5 rounded-full", task.completed ? "bg-success" : "bg-primary")} />
             ))}
           </div>
         )}

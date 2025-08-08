@@ -1,16 +1,25 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Task } from '@/lib/types';
+import { Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar, Check, X } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar, Check, X, Tag as TagIcon } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { CalendarView } from './CalendarView';
 import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+
+const initialTags: Tag[] = [
+  { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
+  { id: 'tag-2', label: 'Development', color: '#3B82F6' },
+  { id: 'tag-3', label: 'Design', color: '#F97316' },
+  { id: 'tag-4', label: 'Personal', color: '#8B5CF6' },
+];
 
 const initialTasks: Task[] = [
   {
@@ -19,10 +28,11 @@ const initialTasks: Task[] = [
     description: 'Outline strategy, budget, and KPIs for the next quarter\'s marketing efforts.',
     completed: false,
     icon: Briefcase,
-    dueDate: new Date(new Date().setDate(new Date().getDate() + 5)),
+    dateRange: { from: new Date(new Date().setDate(new Date().getDate() + 2)), to: new Date(new Date().setDate(new Date().getDate() + 5)) },
+    tags: ['tag-1'],
     subtasks: [
-      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dueDate: new Date(new Date().setDate(new Date().getDate() + 1)) },
-      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dueDate: new Date(new Date().setDate(new Date().getDate() + 3))},
+      { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 1)) } },
+      { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(new Date().setDate(new Date().getDate() + 3))} },
     ],
   },
   {
@@ -31,7 +41,8 @@ const initialTasks: Task[] = [
     description: 'Buy ingredients for this week\'s meals.',
     completed: false,
     icon: ShoppingBasket,
-    dueDate: new Date(),
+    dateRange: { to: new Date() },
+    tags: ['tag-4'],
     subtasks: [],
   },
   {
@@ -40,7 +51,8 @@ const initialTasks: Task[] = [
     description: 'Declutter desk, sort documents, and set up new monitor.',
     completed: true,
     icon: Home,
-    dueDate: new Date(new Date().setDate(new Date().getDate() - 2)),
+    dateRange: { to: new Date(new Date().setDate(new Date().getDate() - 2)) },
+    tags: ['tag-4'],
     subtasks: [
       { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [] },
       { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [] },
@@ -54,10 +66,24 @@ type FilterType = 'all' | 'done' | 'undone';
 
 export default function TaskPage() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tags, setTags] = useState<Tag[]>(initialTags);
+  const [newTagLabel, setNewTagLabel] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [sortAsc, setSortAsc] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const { toast } = useToast();
+
+  const handleAddTag = () => {
+    if (newTagLabel.trim() && !tags.find(t => t.label.toLowerCase() === newTagLabel.trim().toLowerCase())) {
+      const newTag: Tag = {
+        id: crypto.randomUUID(),
+        label: newTagLabel.trim(),
+        color: `hsl(${Math.random() * 360}, 70%, 50%)`
+      };
+      setTags(prev => [...prev, newTag]);
+      setNewTagLabel('');
+    }
+  };
 
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
@@ -68,6 +94,7 @@ export default function TaskPage() {
         completed: false,
         icon: randomIcon,
         subtasks: [],
+        tags: []
       };
       setTasks((prevTasks) => [newTask, ...prevTasks]);
       setNewTaskTitle('');
@@ -109,7 +136,6 @@ export default function TaskPage() {
     
     setTasks(prev => updateTaskRecursively(prev, id, task => {
       const newCompleted = completed;
-      // Auto-complete parent if all subtasks are done
       const updatedSubtasks = toggleRecursively(task.subtasks, newCompleted);
       const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
       
@@ -141,6 +167,7 @@ export default function TaskPage() {
         id: crypto.randomUUID(),
         icon: randomIcon,
         subtasks: [],
+        tags: []
     };
     setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
   }, []);
@@ -154,9 +181,10 @@ export default function TaskPage() {
     }
     
     const tasksToSort = [...filteredTasks];
+    
     return tasksToSort.sort((a, b) => {
-      const aDate = a.dueDate?.getTime() || (sortAsc ? Infinity : -Infinity);
-      const bDate = b.dueDate?.getTime() || (sortAsc ? Infinity : -Infinity);
+      const aDate = a.dateRange?.from?.getTime() || a.dateRange?.to?.getTime() || (sortAsc ? Infinity : -Infinity);
+      const bDate = b.dateRange?.from?.getTime() || b.dateRange?.to?.getTime() || (sortAsc ? Infinity : -Infinity);
       return sortAsc ? aDate - bDate : bDate - aDate;
     });
   }, [tasks, sortAsc, filter]);
@@ -177,6 +205,52 @@ export default function TaskPage() {
             <Plus className="h-4 w-4 mr-2" />
             Add Task
           </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                <TagIcon className="mr-2 h-4 w-4" />
+                Manage Tags
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium leading-none">Tags</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Create and manage your tags.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="New tag name"
+                    value={newTagLabel}
+                    onChange={e => setNewTagLabel(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                  />
+                  <Button onClick={handleAddTag}>Add</Button>
+                </div>
+                <Command>
+                  <CommandInput placeholder="Filter tags..." />
+                  <CommandList>
+                    <CommandEmpty>No tags found.</CommandEmpty>
+                    <CommandGroup>
+                      {tags.map(tag => (
+                        <CommandItem key={tag.id} className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
+                            <span>{tag.label}</span>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTags(tags.filter(t => t.id !== tag.id))}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         
         <Tabs defaultValue="list" className="w-full">
@@ -199,7 +273,7 @@ export default function TaskPage() {
               </div>
               <Button variant="ghost" onClick={() => setSortAsc(!sortAsc)}>
                 <ArrowDownUp className="h-4 w-4 mr-2" />
-                Sort by Due Date
+                Sort by Date
               </Button>
             </div>
             <div className="flex flex-col gap-3">
@@ -207,6 +281,7 @@ export default function TaskPage() {
                 <TaskItem
                   key={task.id}
                   task={task}
+                  allTags={tags}
                   onUpdate={handleUpdate}
                   onToggleComplete={handleToggleComplete}
                   onDelete={handleDelete}
