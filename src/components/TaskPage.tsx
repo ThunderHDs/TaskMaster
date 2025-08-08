@@ -58,7 +58,7 @@ export default function TaskPage() {
         description: 'Buy ingredients for this week\'s meals.',
         completed: false,
         icon: ShoppingBasket,
-        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
+        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
         tags: ['tag-4'],
         subtasks: [],
       },
@@ -68,11 +68,11 @@ export default function TaskPage() {
         description: 'Declutter desk, sort documents, and set up new monitor.',
         completed: true,
         icon: Home,
-        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) },
+        dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
         tags: ['tag-4'],
         subtasks: [
-          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[] },
-          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [] },
+          { id: '3-1', title: 'Sort papers and file important documents', completed: true, icon: Home, subtasks: [], tags:[], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2) } },
+          { id: '3-2', title: 'Wipe down all surfaces', completed: true, icon: Home, subtasks: [], tags: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) } },
         ],
       },
     ];
@@ -115,6 +115,7 @@ export default function TaskPage() {
       };
       return removeTagFromTasks(prevTasks);
     });
+    setEditingTag(null);
     toast({ title: "Tag deleted and removed from all tasks." });
   };
 
@@ -138,6 +139,14 @@ export default function TaskPage() {
     setNewTaskTags([]);
     setShowNewTaskOptions(false);
   }
+  
+  const handleNewTaskDateChange = (range: DateRange | undefined) => {
+    if (range?.from && !range.to) {
+        setNewTaskDateRange({ from: new Date(), to: range.from });
+    } else {
+        setNewTaskDateRange(range);
+    }
+  };
 
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
@@ -325,7 +334,7 @@ export default function TaskPage() {
                                     mode="range"
                                     defaultMonth={newTaskDateRange?.from}
                                     selected={newTaskDateRange}
-                                    onSelect={setNewTaskDateRange}
+                                    onSelect={handleNewTaskDateChange}
                                     numberOfMonths={2}
                                 />
                             </PopoverContent>
@@ -413,7 +422,11 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {tags.map(tag => (
-                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md">
+                                            <CommandItem 
+                                                key={tag.id} 
+                                                className="flex justify-between items-center w-full p-2"
+                                                onSelect={(e) => { e.preventDefault()}}
+                                            >
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span>{tag.label}</span>
@@ -442,7 +455,7 @@ export default function TaskPage() {
                                                         </AlertDialogContent>
                                                     </AlertDialog>
                                                 </div>
-                                            </div>
+                                            </CommandItem>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
@@ -514,9 +527,7 @@ export default function TaskPage() {
                                 value={editingTag.color} 
                                 onChange={(e) => {
                                     const newColor = e.target.value;
-                                    if (/^#[0-9A-F]{6}$/i.test(newColor) || newColor === '') {
-                                        setEditingTag({...editingTag, color: newColor});
-                                    }
+                                    setEditingTag({...editingTag, color: newColor});
                                  }}
                                 className="flex-1"
                             />

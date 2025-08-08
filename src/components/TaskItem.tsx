@@ -72,6 +72,15 @@ export function TaskItem({
   const [newDateRange, setNewDateRange] = useState<DateRange | undefined>(undefined);
   const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
   const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
+  
+  const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+    if (range?.from && !range.to) {
+        const newRange = { from: new Date(), to: range.from };
+        handleDateChange(newRange, target);
+    } else {
+        handleDateChange(range, target);
+    }
+  };
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     setDateChangeTarget(target);
@@ -486,7 +495,7 @@ export function TaskItem({
                                             mode="range"
                                             defaultMonth={newSubtaskDateRange?.from}
                                             selected={newSubtaskDateRange}
-                                            onSelect={(range) => handleDateChange(range, 'subtask')}
+                                            onSelect={(range) => handleDateSelection(range, 'subtask')}
                                             numberOfMonths={1}
                                         />
                                     </PopoverContent>
