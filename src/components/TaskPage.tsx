@@ -37,8 +37,6 @@ export default function TaskPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   
   useEffect(() => {
-    // This is a workaround to ensure the initial dates are consistent on server and client
-    // to avoid hydration errors.
     const now = new Date();
     const initialTasksWithDates = [
       {
@@ -51,7 +49,7 @@ export default function TaskPage() {
         tags: ['tag-1'],
         subtasks: [
           { id: '1-1', title: 'Finalize campaign goals', completed: true, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 10), to: new Date(now.getFullYear(), now.getMonth(), 11) }, tags:[] },
-          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[] },
+          { id: '1-2', title: 'Allocate budget for channels', completed: false, icon: Briefcase, subtasks: [], dateRange: { from: new Date(now.getFullYear(), now.getMonth(), 12), to: new Date(now.getFullYear(), now.getMonth(), 15)}, tags:[] },
         ],
       },
       {
@@ -107,14 +105,26 @@ export default function TaskPage() {
 
   const handleDeleteTag = (tagId: string) => {
     setTags(tags.filter(t => t.id !== tagId));
-  }
+    setTasks(prevTasks => {
+      const removeTagFromTasks = (taskList: Task[]): Task[] => {
+        return taskList.map(task => {
+          const newTags = task.tags?.filter(tId => tId !== tagId);
+          const newSubtasks = task.subtasks ? removeTagFromTasks(task.subtasks) : [];
+          return {...task, tags: newTags, subtasks: newSubtasks};
+        });
+      };
+      return removeTagFromTasks(prevTasks);
+    });
+    toast({ title: "Tag deleted and removed from all tasks." });
+  };
+
 
   const handleAddTag = () => {
     if (newTagLabel.trim() && !tags.find(t => t.label.toLowerCase() === newTagLabel.trim().toLowerCase())) {
       const newTag: Tag = {
         id: crypto.randomUUID(),
         label: newTagLabel.trim(),
-        color: `hsl(${Math.random() * 360}, 70%, 50%)`
+        color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
       };
       setTags(prev => [...prev, newTag]);
       setNewTagLabel('');
@@ -169,42 +179,52 @@ export default function TaskPage() {
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-      const toggleChildren = (tasks: Task[], targetId: string, completeStatus: boolean): Task[] => {
-         return tasks.map(task => {
-            if (task.id === targetId) {
-                const updatedTask = { ...task, completed: completeStatus };
-                if (task.subtasks.length > 0) {
-                    updatedTask.subtasks = task.subtasks.map(sub => toggleChildren([sub], sub.id, completeStatus)[0]);
-                }
-                return updatedTask;
-            }
-            if (task.subtasks.length > 0) {
-                return { ...task, subtasks: toggleChildren(task.subtasks, targetId, completeStatus) };
+    let tasksToUpdate = [...tasks];
+  
+    const toggleChildren = (taskList: Task[], parentCompleted: boolean): Task[] => {
+      return taskList.map(task => ({
+        ...task,
+        completed: parentCompleted,
+        subtasks: task.subtasks ? toggleChildren(task.subtasks, parentCompleted) : [],
+      }));
+    };
+  
+    const updateRecursively = (taskList: Task[], targetId: string): Task[] => {
+      return taskList.map(task => {
+        if (task.id === targetId) {
+          const newCompletedStatus = !task.completed;
+          return {
+            ...task,
+            completed: newCompletedStatus,
+            subtasks: task.subtasks ? toggleChildren(task.subtasks, newCompletedStatus) : [],
+          };
+        }
+        if (task.subtasks && task.subtasks.length > 0) {
+          const newSubtasks = updateRecursively(task.subtasks, targetId);
+          if (newSubtasks !== task.subtasks) {
+            const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+            return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
+          }
+        }
+        return task;
+      });
+    };
+    
+    tasksToUpdate = updateRecursively(tasksToUpdate, id);
+  
+    const checkParents = (taskList: Task[]): Task[] => {
+        return taskList.map(task => {
+            if (task.subtasks && task.subtasks.length > 0) {
+                const newSubtasks = checkParents(task.subtasks);
+                const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+                return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
             }
             return task;
         });
-      };
-  
-      const updateParents = (tasks: Task[]): Task[] => {
-        return tasks.map(task => {
-          if (task.subtasks.length > 0) {
-            const updatedSubtasks = updateParents(task.subtasks);
-            const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
-            return {
-              ...task,
-              subtasks: updatedSubtasks,
-              completed: allSubtasksCompleted,
-            };
-          }
-          return task;
-        });
-      };
-      
-      setTasks(currentTasks => {
-        const toggledTasks = toggleChildren(currentTasks, id, completed);
-        return updateParents(toggledTasks);
-      });
-    }, []);
+    };
+
+    setTasks(checkParents(tasksToUpdate));
+  }, [tasks]);
 
   const handleDelete = useCallback((id: string) => {
     const deleteRecursively = (taskList: Task[], idToDelete: string): Task[] => {
@@ -397,20 +417,20 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {tags.map(tag => (
-                                            <div key={tag.id} className="flex justify-between items-center py-1.5 px-2 rounded-sm text-sm" >
+                                            <CommandItem key={tag.id} onSelect={() => {}} className="flex justify-between items-center w-full">
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                                                     <span>{tag.label}</span>
                                                 </div>
                                                 <div className="flex items-center">
-                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
+                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); setEditingTag({...tag})}}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteTag(tag.id)}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); handleDeleteTag(tag.id)}}>
                                                         <X className="h-4 w-4" />
                                                     </Button>
                                                 </div>
-                                            </div>
+                                            </CommandItem>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
@@ -471,13 +491,14 @@ export default function TaskPage() {
                         <Label htmlFor="tag-color">Tag Color</Label>
                         <div className="flex items-center gap-2">
                            <Input 
-                                id="tag-color"
+                                id="tag-color-picker"
                                 type="color"
                                 value={editingTag.color} 
                                 onChange={(e) => setEditingTag({...editingTag, color: e.target.value})}
                                 className="p-1 h-10 w-14"
                             />
                              <Input 
+                                id="tag-color-hex"
                                 value={editingTag.color} 
                                 onChange={(e) => setEditingTag({...editingTag, color: e.target.value})}
                                 className="flex-1"
