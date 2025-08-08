@@ -19,7 +19,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { format, isAfter } from 'date-fns';
+import { format, isAfter, isBefore } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SuggestSubtasksDialog } from './SuggestSubtasksDialog';
 import {
@@ -65,12 +65,20 @@ export function TaskItem({
   
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSubtaskSuggestions, setShowSubtaskSuggestions] = useState(false);
+  
   const [showDateWarning, setShowDateWarning] = useState(false);
   const [newDateRange, setNewDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
+
 
   const handleDateChange = (range: DateRange | undefined) => {
-    if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, parentTask.dateRange.to)) {
+    if (parentTask?.dateRange?.from && range?.from && isBefore(range.from, parentTask.dateRange.from)) {
+        setNewDateRange(range);
+        setDateWarningType('start');
+        setShowDateWarning(true);
+    } else if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, parentTask.dateRange.to)) {
       setNewDateRange(range);
+      setDateWarningType('end');
       setShowDateWarning(true);
     } else {
       setEditedTask({ ...editedTask, dateRange: range ?? undefined });
@@ -78,17 +86,25 @@ export function TaskItem({
   };
   
   const confirmDateChange = () => {
-    if (newDateRange && parentTask) {
-        onUpdate(parentTask.id, { dateRange: { ...parentTask.dateRange, to: newDateRange.to } });
+    if (newDateRange && parentTask && dateWarningType) {
+        const parentUpdate: Partial<Task> = {};
+        if (dateWarningType === 'start' && newDateRange.from) {
+            parentUpdate.dateRange = { ...parentTask.dateRange, from: newDateRange.from };
+        } else if (dateWarningType === 'end' && newDateRange.to) {
+            parentUpdate.dateRange = { ...parentTask.dateRange, to: newDateRange.to };
+        }
+        onUpdate(parentTask.id, parentUpdate);
         setEditedTask({ ...editedTask, dateRange: newDateRange });
     }
     setShowDateWarning(false);
     setNewDateRange(undefined);
+    setDateWarningType(null);
   };
 
   const cancelDateChange = () => {
     setShowDateWarning(false);
     setNewDateRange(undefined);
+    setDateWarningType(null);
   };
 
   const handleSave = () => {
@@ -504,8 +520,9 @@ export function TaskItem({
                 <AlertDialogHeader>
                     <AlertDialogTitle>Update Parent Task Date?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        The selected date for this subtask is after the parent task's due date.
-                        Would you like to extend the parent task's due date to match?
+                        {dateWarningType === 'end'
+                        ? "The selected end date for this subtask is after the parent task's end date. Would you like to extend the parent task's end date to match?"
+                        : "The selected start date for this subtask is before the parent task's start date. Would you like to update the parent task's start date to match?"}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
