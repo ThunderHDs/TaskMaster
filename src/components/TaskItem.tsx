@@ -63,6 +63,7 @@ type TaskItemProps = {
   parentTask?: Task;
   level?: number;
   viewMode?: ViewMode;
+  onTaskClick?: (task: Task) => void;
 };
 
 export function TaskItem({
@@ -78,6 +79,7 @@ export function TaskItem({
   parentTask,
   level = 0,
   viewMode = 'default',
+  onTaskClick,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
@@ -137,8 +139,8 @@ export function TaskItem({
     const rangeFrom = range?.from ? startOfDay(new Date(range.from)) : null;
     const rangeTo = range?.to ? startOfDay(new Date(range.to)) : null;
 
-    const startConflict = parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom);
-    const endConflict = parentTo && rangeTo && isAfter(rangeTo, parentTo);
+    const startConflict = (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) || (!parentFrom && rangeFrom);
+    const endConflict = (parentTo && rangeTo && isAfter(rangeTo, parentTo)) || (!parentTo && rangeTo);
 
     if (startConflict || endConflict) {
       setNewDateRange(range);
@@ -165,10 +167,10 @@ export function TaskItem({
       const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
       const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
   
-      if ((parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) || !parentFrom && rangeFrom) {
+      if ((parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) || (!parentFrom && rangeFrom)) {
         parentUpdate.dateRange!.from = newDateRange.from;
       }
-      if ((parentTo && rangeTo && isAfter(rangeTo, parentTo)) || !parentTo && rangeTo) {
+      if ((parentTo && rangeTo && isAfter(rangeTo, parentTo)) || (!parentTo && rangeTo)) {
         parentUpdate.dateRange!.to = newDateRange.to;
       }
       
@@ -350,8 +352,21 @@ export function TaskItem({
 
   const isCompact = viewMode === 'compact' && level === 0;
 
+  const handleCardClick = () => {
+    if (isCompact && onTaskClick) {
+      onTaskClick(task);
+    }
+  };
+
   return (
-    <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
+    <Card 
+      className={cn(
+        'w-full transition-all duration-300', 
+        task.completed ? 'bg-muted/50' : 'bg-card',
+        isCompact && 'cursor-pointer hover:bg-muted/80'
+      )}
+      onClick={handleCardClick}
+    >
      <Collapsible open={openActivityTaskId === task.id && !isEditing} onOpenChange={() => onToggleActivity(task.id)}>
       <div className={cn("flex flex-col gap-2", isCompact ? 'p-2' : 'p-3 sm:p-4')}>
         {isEditing ? (
@@ -457,6 +472,7 @@ export function TaskItem({
               onCheckedChange={checked => onToggleComplete(task.id, !!checked, task.title)}
               className="mt-1"
               aria-labelledby={`task-label-${task.id}`}
+              onClick={(e) => e.stopPropagation()}
             />
             <div className="flex-grow">
               <div className="flex items-start justify-between gap-2">
@@ -465,10 +481,16 @@ export function TaskItem({
                     id={`task-label-${task.id}`}
                     htmlFor={`task-${task.id}`}
                     className={cn(
-                      'font-medium transition-colors cursor-pointer',
+                      'font-medium transition-colors',
+                      isCompact ? '' : 'cursor-pointer',
                       task.completed ? 'line-through text-muted-foreground' : 'text-foreground'
                     )}
-                    onClick={() => !isEditing && setIsEditing(true)}
+                    onClick={(e) => {
+                      if (!isCompact) {
+                        e.preventDefault();
+                        setIsEditing(true)
+                      }
+                    }}
                   >
                     {truncatedTitle}
                   </label>
@@ -488,7 +510,7 @@ export function TaskItem({
                   )}
                 </div>
 
-                <div className={cn("flex items-center flex-shrink-0", isCompact ? 'gap-0' : 'gap-1')}>
+                <div className={cn("flex items-center flex-shrink-0", isCompact ? 'gap-0' : 'gap-1')} onClick={(e) => e.stopPropagation()}>
                   {dueDateString && (
                     <span
                       className={cn(
@@ -502,11 +524,13 @@ export function TaskItem({
                       {dueDateString}
                     </span>
                   )}
-                   <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.preventDefault(); onToggleActivity(task.id);}}>
-                      <History className="h-4 w-4" />
-                    </Button>
-                  </CollapsibleTrigger>
+                  {!isCompact && 
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleActivity(task.id);}}>
+                        <History className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                  }
                   {!isCompact && <TaskIcon className="h-4 w-4 text-muted-foreground" />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

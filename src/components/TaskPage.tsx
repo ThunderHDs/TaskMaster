@@ -5,7 +5,7 @@ import { Activity, Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Rows, Columns } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Rows, Columns, ArrowLeft } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -38,6 +38,7 @@ export default function TaskPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('default');
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   
   useEffect(() => {
     const now = new Date();
@@ -398,8 +399,26 @@ export default function TaskPage() {
     });
   }, []);
 
+  const handleTaskClick = (task: Task) => {
+    if (viewMode === 'compact') {
+      setFocusedTaskId(task.id);
+    }
+  };
+
+  const clearFocusedTask = () => {
+    setFocusedTaskId(null);
+  }
+
   const filteredAndSortedTasks = useMemo(() => {
-    let filteredTasks = [...tasks];
+    let tasksToDisplay = tasks;
+
+    if (viewMode === 'compact' && focusedTaskId) {
+      const focusedTask = tasks.find(t => t.id === focusedTaskId);
+      tasksToDisplay = focusedTask ? [focusedTask] : [];
+    }
+    
+    let filteredTasks = [...tasksToDisplay];
+
     if (filter === 'done') {
       filteredTasks = filteredTasks.filter(task => task.completed);
     } else if (filter === 'undone') {
@@ -413,7 +432,7 @@ export default function TaskPage() {
       const bDate = bDateValue ? new Date(bDateValue).getTime() : (sortAsc ? Infinity : -Infinity);
       return sortAsc ? aDate - bDate : bDate - aDate;
     });
-  }, [tasks, sortAsc, filter]);
+  }, [tasks, sortAsc, filter, viewMode, focusedTaskId]);
 
   const handleNewTaskTagToggle = (tagId: string) => {
     setNewTaskTags(prev => 
@@ -426,11 +445,12 @@ export default function TaskPage() {
   };
   
   const toggleViewMode = () => {
-    setViewMode(prevMode => {
-      const newMode = prevMode === 'default' ? 'compact' : 'default';
-      localStorage.setItem('task-view-mode', newMode);
-      return newMode;
-    });
+    const newMode = viewMode === 'default' ? 'compact' : 'default';
+    if (newMode === 'default') {
+      clearFocusedTask();
+    }
+    setViewMode(newMode);
+    localStorage.setItem('task-view-mode', newMode);
   };
 
 
@@ -531,16 +551,24 @@ export default function TaskPage() {
         
         <Tabs defaultValue="list" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="list">
+            <TabsTrigger value="list" onClick={clearFocusedTask}>
               <ListTodo className="mr-2 h-4 w-4" />
               List View
             </TabsTrigger>
-            <TabsTrigger value="calendar">
+            <TabsTrigger value="calendar" onClick={clearFocusedTask}>
               <CalendarIcon className="mr-2 h-4 w-4" />
               Calendar View
             </TabsTrigger>
           </TabsList>
           <TabsContent value="list">
+             {viewMode === 'compact' && focusedTaskId && (
+              <div className="mb-4">
+                <Button variant="ghost" onClick={clearFocusedTask}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to all tasks
+                </Button>
+              </div>
+            )}
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
                     <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
@@ -659,7 +687,8 @@ export default function TaskPage() {
                   onToggleActivity={handleToggleActivity}
                   openActivityTaskId={openActivityTaskId}
                   level={0}
-                  viewMode={viewMode}
+                  viewMode={focusedTaskId && task.id === focusedTaskId ? 'default' : viewMode}
+                  onTaskClick={handleTaskClick}
                 />
               ))}
               {filteredAndSortedTasks.length === 0 && (
