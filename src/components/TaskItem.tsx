@@ -69,9 +69,11 @@ export function TaskItem({
   const [showDateWarning, setShowDateWarning] = useState(false);
   const [newDateRange, setNewDateRange] = useState<DateRange | undefined>(undefined);
   const [dateWarningType, setDateWarningType] = useState<'start' | 'end' | null>(null);
+  const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
 
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
+    setDateChangeTarget(target);
     if (!parentTask || !range) {
       if(target === 'task') setEditedTask({ ...editedTask, dateRange: range });
       else setNewSubtaskDateRange(range)
@@ -109,10 +111,9 @@ export function TaskItem({
 
         onUpdate(parentTask.id, parentUpdate);
         
-        // This logic depends on whether we are editing the task itself or adding a new subtask
-        if(isEditing) {
+        if(dateChangeTarget === 'task') {
             setEditedTask({ ...editedTask, dateRange: newDateRange });
-        } else {
+        } else if (dateChangeTarget === 'subtask') {
             setNewSubtaskDateRange(newDateRange);
         }
     }
@@ -120,12 +121,14 @@ export function TaskItem({
     setShowDateWarning(false);
     setNewDateRange(undefined);
     setDateWarningType(null);
+    setDateChangeTarget(null);
   };
 
   const cancelDateChange = () => {
     setShowDateWarning(false);
     setNewDateRange(undefined);
     setDateWarningType(null);
+    setDateChangeTarget(null);
   };
 
   const handleSave = () => {
