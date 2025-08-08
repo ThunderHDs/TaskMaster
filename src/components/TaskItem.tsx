@@ -26,6 +26,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from './ui/dropdown-menu';
+import { Progress } from './ui/progress';
 
 type TaskItemProps = {
   task: Task;
@@ -79,6 +80,15 @@ export function TaskItem({
     setIsEditing(false);
   };
   
+  const calculateProgress = () => {
+    if (task.subtasks.length === 0) {
+      return task.completed ? 100 : 0;
+    }
+    const completedSubtasks = task.subtasks.filter(subtask => subtask.completed).length;
+    return (completedSubtasks / task.subtasks.length) * 100;
+  };
+
+  const progress = calculateProgress();
   const TaskIcon = task.icon;
 
   return (
@@ -181,6 +191,12 @@ export function TaskItem({
               </div>
               {task.description && (
                 <p className="text-sm text-muted-foreground mt-1 cursor-pointer" onClick={() => !isEditing && setIsEditing(true)}>{task.description}</p>
+              )}
+               {task.subtasks.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Progress value={progress} className="h-2 w-full" />
+                  <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>
+                </div>
               )}
             </div>
           </div>

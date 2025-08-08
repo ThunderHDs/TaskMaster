@@ -5,11 +5,12 @@ import { Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar, Check, X } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { CalendarView } from './CalendarView';
+import { cn } from '@/lib/utils';
 
 const initialTasks: Task[] = [
   {
@@ -49,10 +50,13 @@ const initialTasks: Task[] = [
 
 const icons = [Briefcase, Home, ShoppingBasket];
 
+type FilterType = 'all' | 'done' | 'undone';
+
 export default function TaskPage() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [sortAsc, setSortAsc] = useState(true);
+  const [filter, setFilter] = useState<FilterType>('all');
   const { toast } = useToast();
 
   const handleAddTask = () => {
@@ -94,7 +98,7 @@ export default function TaskPage() {
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
     const toggleRecursively = (tasks: Task[], parentCompleted: boolean): Task[] => {
       return tasks.map(task => {
-        const currentCompleted = parentCompleted || task.completed;
+        const currentCompleted = parentCompleted || completed;
         return {
           ...task,
           completed: currentCompleted,
@@ -105,10 +109,14 @@ export default function TaskPage() {
     
     setTasks(prev => updateTaskRecursively(prev, id, task => {
       const newCompleted = completed;
+      // Auto-complete parent if all subtasks are done
+      const updatedSubtasks = toggleRecursively(task.subtasks, newCompleted);
+      const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
+      
       return { 
         ...task,
-        completed: newCompleted,
-        subtasks: toggleRecursively(task.subtasks, newCompleted)
+        completed: newCompleted || (updatedSubtasks.length > 0 && allSubtasksCompleted),
+        subtasks: updatedSubtasks
       };
     }));
   }, []);
@@ -134,17 +142,24 @@ export default function TaskPage() {
         icon: randomIcon,
         subtasks: [],
     };
-    setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask] })));
+    setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
   }, []);
 
-  const sortedTasks = useMemo(() => {
-    const tasksToSort = [...tasks];
+  const filteredAndSortedTasks = useMemo(() => {
+    let filteredTasks = tasks;
+    if (filter === 'done') {
+      filteredTasks = tasks.filter(task => task.completed);
+    } else if (filter === 'undone') {
+      filteredTasks = tasks.filter(task => !task.completed);
+    }
+    
+    const tasksToSort = [...filteredTasks];
     return tasksToSort.sort((a, b) => {
       const aDate = a.dueDate?.getTime() || (sortAsc ? Infinity : -Infinity);
       const bDate = b.dueDate?.getTime() || (sortAsc ? Infinity : -Infinity);
       return sortAsc ? aDate - bDate : bDate - aDate;
     });
-  }, [tasks, sortAsc]);
+  }, [tasks, sortAsc, filter]);
 
   return (
     <div className="w-full">
@@ -176,14 +191,19 @@ export default function TaskPage() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="list">
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
+                <Button variant={filter === 'done' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('done')}><Check className="mr-2 h-4 w-4" />Done</Button>
+                <Button variant={filter === 'undone' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('undone')}><X className="mr-2 h-4 w-4" />Undone</Button>
+              </div>
               <Button variant="ghost" onClick={() => setSortAsc(!sortAsc)}>
                 <ArrowDownUp className="h-4 w-4 mr-2" />
                 Sort by Due Date
               </Button>
             </div>
             <div className="flex flex-col gap-3">
-              {sortedTasks.map((task) => (
+              {filteredAndSortedTasks.map((task) => (
                 <TaskItem
                   key={task.id}
                   task={task}
@@ -193,6 +213,11 @@ export default function TaskPage() {
                   onAddSubtask={handleAddSubtask}
                 />
               ))}
+              {filteredAndSortedTasks.length === 0 && (
+                <div className="text-center text-muted-foreground py-10">
+                  <p>No tasks match the current filter.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
           <TabsContent value="calendar">
