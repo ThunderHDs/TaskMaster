@@ -196,47 +196,45 @@ export default function TaskPage() {
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-    let tasksToUpdate = [...tasks];
-  
-    const toggleChildren = (taskList: Task[], parentCompleted: boolean): Task[] => {
-      return taskList.map(task => ({
+    const toggleChildren = (tasks: Task[], parentCompleted: boolean): Task[] => {
+      return tasks.map(task => ({
         ...task,
         completed: parentCompleted,
-        subtasks: task.subtasks ? toggleChildren(task.subtasks, parentCompleted) : [],
+        subtasks: toggleChildren(task.subtasks || [], parentCompleted),
       }));
     };
   
-    const updateRecursively = (taskList: Task[], targetId: string): Task[] => {
-      return taskList.map(task => {
-        if (task.id === targetId) {
-          const newCompletedStatus = completed;
-          return {
-            ...task,
-            completed: newCompletedStatus,
-            subtasks: task.subtasks ? toggleChildren(task.subtasks, newCompletedStatus) : [],
-          };
-        }
+    const updateParents = (tasks: Task[]): Task[] => {
+      return tasks.map(task => {
         if (task.subtasks && task.subtasks.length > 0) {
-          return { ...task, subtasks: updateRecursively(task.subtasks, targetId) };
+          const newSubtasks = updateParents(task.subtasks);
+          const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+          return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
         }
         return task;
       });
     };
-    
-    tasksToUpdate = updateRecursively(tasksToUpdate, id);
   
-    const checkParents = (taskList: Task[]): Task[] => {
-        return taskList.map(task => {
-            if (task.subtasks && task.subtasks.length > 0) {
-                const newSubtasks = checkParents(task.subtasks);
-                const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
-                return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
-            }
-            return task;
-        });
+    const updateTasks = (tasks: Task[], targetId: string): Task[] => {
+      return tasks.map(task => {
+        if (task.id === targetId) {
+          return {
+            ...task,
+            completed: completed,
+            subtasks: toggleChildren(task.subtasks || [], completed),
+          };
+        }
+        if (task.subtasks && task.subtasks.length > 0) {
+          return { ...task, subtasks: updateTasks(task.subtasks, targetId) };
+        }
+        return task;
+      });
     };
-
-    setTasks(checkParents(tasksToUpdate));
+  
+    setTasks(currentTasks => {
+      const tasksWithToggledItem = updateTasks(currentTasks, id);
+      return updateParents(tasksWithToggledItem);
+    });
   }, []);
 
   const handleDelete = useCallback((id: string) => {
@@ -442,36 +440,52 @@ export default function TaskPage() {
                                         <CommandEmpty>No tags found.</CommandEmpty>
                                         <CommandGroup>
                                         {filteredTags.map(tag => (
-                                            <div key={tag.id} className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
-                                                    <span className="text-sm">{tag.label}</span>
-                                                </div>
-                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive">
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
+                                          <div
+                                            key={tag.id}
+                                            className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
+                                          >
+                                            <div className="flex items-center gap-2 flex-grow" onClick={() => setEditingTag({ ...tag })}>
+                                              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
+                                              <span className="text-sm">{tag.label}</span>
                                             </div>
+                                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setEditingTag({ ...tag });
+                                                }}
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                              </Button>
+                                              <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 text-destructive hover:text-destructive"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <X className="h-4 w-4" />
+                                                  </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                  <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                      This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
+                                                    </AlertDialogDescription>
+                                                  </AlertDialogHeader>
+                                                  <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
+                                                  </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                              </AlertDialog>
+                                            </div>
+                                          </div>
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
