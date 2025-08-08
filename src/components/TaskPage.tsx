@@ -5,7 +5,7 @@ import { Tag, Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TaskItem } from './TaskItem';
-import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar, Check, X, Tag as TagIcon } from 'lucide-react';
+import { Briefcase, Home, ShoppingBasket, Plus, ArrowDownUp, ListTodo, Calendar as CalendarIcon, Check, X, Tag as TagIcon, Edit, Palette } from 'lucide-react';
 import Header from './Header';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -13,6 +13,12 @@ import { CalendarView } from './CalendarView';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { DateRange } from 'react-day-picker';
+import { Calendar } from './ui/calendar';
+import { format } from 'date-fns';
+import { Textarea } from './ui/textarea';
+import { Badge } from './ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 
 const initialTags: Tag[] = [
   { id: 'tag-1', label: 'Marketing', color: '#EF4444' },
@@ -68,10 +74,27 @@ export default function TaskPage() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [tags, setTags] = useState<Tag[]>(initialTags);
   const [newTagLabel, setNewTagLabel] = useState('');
+  
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [newTaskDateRange, setNewTaskDateRange] = useState<DateRange | undefined>();
+  const [newTaskTags, setNewTaskTags] = useState<string[]>([]);
+  const [showNewTaskOptions, setShowNewTaskOptions] = useState(false);
+  
   const [sortAsc, setSortAsc] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const { toast } = useToast();
+
+  const handleUpdateTag = (tagToUpdate: Tag) => {
+    if (!tagToUpdate.label.trim()) {
+      toast({ title: "Tag name can't be empty", variant: "destructive" });
+      return;
+    }
+    setTags(tags.map(t => t.id === tagToUpdate.id ? tagToUpdate : t));
+    setEditingTag(null);
+    toast({ title: "Tag updated!" });
+  }
 
   const handleAddTag = () => {
     if (newTagLabel.trim() && !tags.find(t => t.label.toLowerCase() === newTagLabel.trim().toLowerCase())) {
@@ -85,19 +108,29 @@ export default function TaskPage() {
     }
   };
 
+  const resetNewTaskForm = () => {
+    setNewTaskTitle('');
+    setNewTaskDescription('');
+    setNewTaskDateRange(undefined);
+    setNewTaskTags([]);
+    setShowNewTaskOptions(false);
+  }
+
   const handleAddTask = () => {
     if (newTaskTitle.trim()) {
       const randomIcon = icons[Math.floor(Math.random() * icons.length)];
       const newTask: Task = {
         id: crypto.randomUUID(),
         title: newTaskTitle.trim(),
+        description: newTaskDescription.trim() || undefined,
         completed: false,
         icon: randomIcon,
         subtasks: [],
-        tags: []
+        tags: newTaskTags,
+        dateRange: newTaskDateRange
       };
       setTasks((prevTasks) => [newTask, ...prevTasks]);
-      setNewTaskTitle('');
+      resetNewTaskForm();
       toast({ title: "Task added!", description: `"${newTask.title}" has been added.` });
     }
   };
@@ -189,68 +222,103 @@ export default function TaskPage() {
     });
   }, [tasks, sortAsc, filter]);
 
+  const handleNewTaskTagToggle = (tagId: string) => {
+    setNewTaskTags(prev => 
+      prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]
+    );
+  };
+
   return (
     <div className="w-full">
       <Header />
       <div className="w-full max-w-4xl mx-auto px-4 pb-8">
-        <div className="flex gap-2 mb-6">
-          <Input
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-            placeholder="Add a new task..."
-            className="flex-grow"
-          />
-          <Button onClick={handleAddTask}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Task
-          </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline">
-                <TagIcon className="mr-2 h-4 w-4" />
-                Manage Tags
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <h4 className="font-medium leading-none">Tags</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Create and manage your tags.
-                  </p>
+        <div className="bg-card border rounded-lg p-4 mb-6">
+            <div className="flex gap-2">
+                <Input
+                    value={newTaskTitle}
+                    onChange={(e) => {
+                      setNewTaskTitle(e.target.value);
+                      if (e.target.value.length > 0 && !showNewTaskOptions) {
+                        setShowNewTaskOptions(true);
+                      } else if (e.target.value.length === 0) {
+                        setShowNewTaskOptions(false);
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
+                    placeholder="Add a new task..."
+                    className="flex-grow text-base"
+                />
+                 <Button onClick={handleAddTask} disabled={!newTaskTitle.trim()}>
+                    <Plus className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">Add Task</span>
+                </Button>
+            </div>
+            {showNewTaskOptions && (
+                <div className="mt-4 space-y-4">
+                    <Textarea 
+                        value={newTaskDescription}
+                        onChange={e => setNewTaskDescription(e.target.value)}
+                        placeholder="Add description..."
+                    />
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant={'outline'} className={cn('w-full justify-start text-left font-normal', !newTaskDateRange && 'text-muted-foreground')}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {newTaskDateRange?.from ? (
+                                        newTaskDateRange.to ? (
+                                            <>{format(newTaskDateRange.from, 'LLL dd, y')} - {format(newTaskDateRange.to, 'LLL dd, y')}</>
+                                        ) : (
+                                            format(newTaskDateRange.from, 'LLL dd, y')
+                                        )
+                                    ) : (
+                                        <span>Pick a date range</span>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={newTaskDateRange?.from}
+                                    selected={newTaskDateRange}
+                                    onSelect={setNewTaskDateRange}
+                                    numberOfMonths={2}
+                                />
+                            </PopoverContent>
+                        </Popover>
+
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant={'outline'} className="w-full justify-start text-left font-normal">
+                                    <TagIcon className="mr-2 h-4 w-4" />
+                                    <span>{newTaskTags.length > 0 ? `${newTaskTags.length} tags selected` : 'Add tags'}</span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-2">
+                                <div className="flex flex-wrap gap-2 max-w-xs">
+                                    {tags.map(tag => (
+                                        <Badge
+                                            key={tag.id}
+                                            variant={newTaskTags.includes(tag.id) ? 'secondary' : 'outline'}
+                                            onClick={() => handleNewTaskTagToggle(tag.id)}
+                                            style={{
+                                                backgroundColor: newTaskTags.includes(tag.id) ? tag.color : undefined,
+                                                borderColor: tag.color,
+                                                color: newTaskTags.includes(tag.id) ? 'white' : tag.color,
+                                                cursor: 'pointer'
+                                            }}
+                                            className="text-xs"
+                                        >
+                                            {tag.label}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                  <Input 
-                    placeholder="New tag name"
-                    value={newTagLabel}
-                    onChange={e => setNewTagLabel(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddTag()}
-                  />
-                  <Button onClick={handleAddTag}>Add</Button>
-                </div>
-                <Command>
-                  <CommandInput placeholder="Filter tags..." />
-                  <CommandList>
-                    <CommandEmpty>No tags found.</CommandEmpty>
-                    <CommandGroup>
-                      {tags.map(tag => (
-                        <CommandItem key={tag.id} className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
-                            <span>{tag.label}</span>
-                          </div>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTags(tags.filter(t => t.id !== tag.id))}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </div>
-            </PopoverContent>
-          </Popover>
+            )}
         </div>
         
         <Tabs defaultValue="list" className="w-full">
@@ -260,21 +328,78 @@ export default function TaskPage() {
               List View
             </TabsTrigger>
             <TabsTrigger value="calendar">
-              <Calendar className="mr-2 h-4 w-4" />
+              <CalendarIcon className="mr-2 h-4 w-4" />
               Calendar View
             </TabsTrigger>
           </TabsList>
           <TabsContent value="list">
             <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
-                <Button variant={filter === 'done' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('done')}><Check className="mr-2 h-4 w-4" />Done</Button>
-                <Button variant={filter === 'undone' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('undone')}><X className="mr-2 h-4 w-4" />Undone</Button>
-              </div>
-              <Button variant="ghost" onClick={() => setSortAsc(!sortAsc)}>
-                <ArrowDownUp className="h-4 w-4 mr-2" />
-                Sort by Date
-              </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
+                    <Button variant={filter === 'done' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('done')}><Check className="mr-2 h-4 w-4" />Done</Button>
+                    <Button variant={filter === 'undone' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('undone')}><X className="mr-2 h-4 w-4" />Undone</Button>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm">
+                            <TagIcon className="mr-2 h-4 w-4" />
+                            Manage Tags
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                            <div className="grid gap-4">
+                                <div className="space-y-2">
+                                    <h4 className="font-medium leading-none">Manage Tags</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                    Create and manage your tags.
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Input 
+                                    placeholder="New tag name"
+                                    value={newTagLabel}
+                                    onChange={e => setNewTagLabel(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                                    />
+                                    <Button onClick={handleAddTag}>Add</Button>
+                                </div>
+                                <Command>
+                                    <CommandInput placeholder="Filter tags..." />
+                                    <CommandList>
+                                        <CommandEmpty>No tags found.</CommandEmpty>
+                                        <CommandGroup>
+                                        {tags.map(tag => (
+                                            <CommandItem key={tag.id} className="flex justify-between items-center" onSelect={(e) => e.preventDefault()}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
+                                                    <span>{tag.label}</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTag({...tag})}>
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                    </AlertDialog>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTags(tags.filter(t => t.id !== tag.id))}>
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                    <Button variant="ghost" size="sm" onClick={() => setSortAsc(!sortAsc)}>
+                        <ArrowDownUp className="h-4 w-4 mr-2" />
+                        Sort by Date
+                    </Button>
+                </div>
             </div>
             <div className="flex flex-col gap-3">
               {filteredAndSortedTasks.map((task) => (
@@ -300,6 +425,49 @@ export default function TaskPage() {
           </TabsContent>
         </Tabs>
       </div>
+      {editingTag && (
+        <AlertDialog open={!!editingTag} onOpenChange={() => setEditingTag(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Edit Tag</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Update the label and color for your tag.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="tag-label">Tag Label</Label>
+                        <Input 
+                            id="tag-label"
+                            value={editingTag.label} 
+                            onChange={(e) => setEditingTag({...editingTag, label: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="tag-color">Tag Color</Label>
+                        <div className="flex items-center gap-2">
+                           <Input 
+                                id="tag-color"
+                                type="color"
+                                value={editingTag.color} 
+                                onChange={(e) => setEditingTag({...editingTag, color: e.target.value})}
+                                className="p-1 h-10 w-14"
+                            />
+                             <Input 
+                                value={editingTag.color} 
+                                onChange={(e) => setEditingTag({...editingTag, color: e.target.value})}
+                                className="flex-1"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setEditingTag(null)}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleUpdateTag(editingTag)}>Save Changes</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

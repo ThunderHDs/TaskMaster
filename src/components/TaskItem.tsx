@@ -18,7 +18,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { format } from 'date-fns';
+import { format, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SuggestSubtasksDialog } from './SuggestSubtasksDialog';
 import {
@@ -26,14 +26,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuPortal,
 } from './ui/dropdown-menu';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { DateRange } from 'react-day-picker';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 
 type TaskItemProps = {
   task: Task;
@@ -42,6 +39,7 @@ type TaskItemProps = {
   onToggleComplete: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks' | 'tags'>) => void;
+  parentTask?: Task;
 };
 
 export function TaskItem({
@@ -51,6 +49,7 @@ export function TaskItem({
   onToggleComplete,
   onDelete,
   onAddSubtask,
+  parentTask,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({ ...task });
@@ -58,6 +57,31 @@ export function TaskItem({
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSubtaskSuggestions, setShowSubtaskSuggestions] = useState(false);
+  const [showDateWarning, setShowDateWarning] = useState(false);
+  const [newDateRange, setNewDateRange] = useState<DateRange | undefined>(undefined);
+
+  const handleDateChange = (range: DateRange | undefined) => {
+    if (parentTask?.dateRange?.to && range?.to && isAfter(range.to, parentTask.dateRange.to)) {
+      setNewDateRange(range);
+      setShowDateWarning(true);
+    } else {
+      setEditedTask({ ...editedTask, dateRange: range ?? undefined });
+    }
+  };
+  
+  const confirmDateChange = () => {
+    if (newDateRange && parentTask) {
+        onUpdate(parentTask.id, { dateRange: { ...parentTask.dateRange, to: newDateRange.to } });
+        setEditedTask({ ...editedTask, dateRange: newDateRange });
+    }
+    setShowDateWarning(false);
+    setNewDateRange(undefined);
+  };
+
+  const cancelDateChange = () => {
+    setShowDateWarning(false);
+    setNewDateRange(undefined);
+  };
 
   const handleSave = () => {
     onUpdate(task.id, {
@@ -202,7 +226,7 @@ export function TaskItem({
                   mode="range"
                   defaultMonth={editedTask.dateRange?.from}
                   selected={editedTask.dateRange as DateRange}
-                  onSelect={(range) => setEditedTask({ ...editedTask, dateRange: range ?? undefined })}
+                  onSelect={handleDateChange}
                   numberOfMonths={2}
                 />
               </PopoverContent>
@@ -295,7 +319,7 @@ export function TaskItem({
           </div>
         )}
 
-        {task.subtasks && (task.subtasks.length > 0 || isAddingSubtask || isExpanded) && (
+        {task.subtasks && (task.subtasks.length > 0 || isAddingSubtask || (isExpanded && !isAddingSubtask)) && (
           <div className="pl-8 pt-2 space-y-2">
             {task.subtasks.length > 0 && (
               <button
@@ -325,6 +349,7 @@ export function TaskItem({
                       onToggleComplete={onToggleComplete}
                       onDelete={onDelete}
                       onAddSubtask={onAddSubtask}
+                      parentTask={task}
                     />
                   ))}
                 </div>
@@ -369,6 +394,21 @@ export function TaskItem({
           onAddSubtasks={handleAddSuggestedSubtasks}
         />
       )}
+       <AlertDialog open={showDateWarning} onOpenChange={setShowDateWarning}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Update Parent Task Date?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        The selected date for this subtask is after the parent task's due date.
+                        Would you like to extend the parent task's due date to match?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={cancelDateChange}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDateChange}>Update Parent</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </Card>
   );
 }
