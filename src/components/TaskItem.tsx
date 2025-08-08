@@ -48,7 +48,7 @@ type TaskItemProps = {
   onUpdate: (id: string, updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>>) => void;
   onToggleComplete: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
-  onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>) => void;
+  onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => void;
   parentTask?: Task;
   level?: number;
 };
@@ -82,13 +82,12 @@ export function TaskItem({
   const [dateChangeTarget, setDateChangeTarget] = useState<'task' | 'subtask' | null>(null);
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  
+  const [stagedParentUpdate, setStagedParentUpdate] = useState<Partial<Task> | null>(null);
+
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
-    let newRange = range;
-    if (range?.from && !range.to) {
-      newRange = { from: undefined, to: range.from };
-    }
-    handleDateChange(newRange, target, true);
+    handleDateChange(range, target, true);
   };
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask', fromSelection: boolean = false) => {
@@ -96,6 +95,7 @@ export function TaskItem({
     if (fromSelection) {
       setIsDatePickerOpen(true);
     }
+    setStagedParentUpdate(null);
 
     const relevantParent = target === 'subtask' ? task : parentTask;
 
@@ -130,7 +130,7 @@ export function TaskItem({
 
   const confirmDateChange = () => {
     const relevantParent = dateChangeTarget === 'subtask' ? task : parentTask;
-
+  
     if (newDateRange && relevantParent) {
       const parentUpdate: Partial<Task> = {
         dateRange: {
@@ -138,47 +138,57 @@ export function TaskItem({
           to: relevantParent.dateRange?.to,
         },
       };
-
+  
       const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
       const parentTo = relevantParent.dateRange?.to ? startOfDay(new Date(relevantParent.dateRange.to)) : null;
       const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
       const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
-
+  
       if (parentFrom && rangeFrom && isBefore(rangeFrom, parentFrom)) {
         parentUpdate.dateRange!.from = newDateRange.from;
       }
       if (parentTo && rangeTo && isAfter(rangeTo, parentTo)) {
         parentUpdate.dateRange!.to = newDateRange.to;
       }
-
-      onUpdate(relevantParent.id, parentUpdate);
-
+      
+      setStagedParentUpdate(parentUpdate);
+  
       if (dateChangeTarget === 'task') {
         setEditedTask({ ...editedTask, dateRange: newDateRange });
       } else if (dateChangeTarget === 'subtask') {
         setNewSubtaskDateRange(newDateRange);
       }
     }
-
+  
     setShowDateWarning(false);
     setNewDateRange(undefined);
-    setDateChangeTarget(null);
+    // Keep dateChangeTarget to handle applying changes on save/add
   };
 
   const cancelDateChange = () => {
     setShowDateWarning(false);
     setNewDateRange(undefined);
     setDateChangeTarget(null);
+    setStagedParentUpdate(null);
   };
 
   const handleSave = () => {
-    onUpdate(task.id, {
+    const updates: Partial<Omit<Task, 'id' | 'subtasks' | 'icon'>> = {
       title: editedTask.title,
       description: editedTask.description,
       dateRange: editedTask.dateRange,
       tags: editedTask.tags,
-    });
+    }
+    
+    if (parentTask && stagedParentUpdate && dateChangeTarget === 'task') {
+        onUpdate(parentTask.id, stagedParentUpdate);
+    }
+    
+    onUpdate(task.id, updates);
+
     setIsEditing(false);
+    setStagedParentUpdate(null);
+    setDateChangeTarget(null);
   };
 
   const resetNewSubtaskForm = () => {
@@ -188,6 +198,8 @@ export function TaskItem({
     setNewSubtaskTags([]);
     setIsAddingSubtask(false);
     setShowSubtaskOptions(false);
+    setStagedParentUpdate(null);
+    setDateChangeTarget(null);
   };
 
   const handleAddSubtask = () => {
@@ -195,7 +207,11 @@ export function TaskItem({
       let finalDateRange = newSubtaskDateRange;
       if (!finalDateRange?.from && !finalDateRange?.to) {
         finalDateRange = undefined;
+      } else if (!finalDateRange.from) {
+        finalDateRange.from = new Date();
       }
+
+      const parentUpdate = dateChangeTarget === 'subtask' ? stagedParentUpdate : null;
 
       onAddSubtask(task.id, {
         title: newSubtaskTitle.trim(),
@@ -203,7 +219,7 @@ export function TaskItem({
         dateRange: finalDateRange,
         tags: newSubtaskTags,
         completed: false,
-      });
+      }, parentUpdate ?? undefined);
       resetNewSubtaskForm();
       setIsExpanded(true);
     }
@@ -219,6 +235,8 @@ export function TaskItem({
   const handleCancelEdit = () => {
     setEditedTask({ ...task });
     setIsEditing(false);
+    setStagedParentUpdate(null);
+    setDateChangeTarget(null);
   };
 
   const handleCancelAddSubtask = () => {
@@ -266,10 +284,12 @@ export function TaskItem({
   const maxNestingLevel = 2;
 
   const getDateWarningDescription = () => {
-    if (!newDateRange || !parentTask) return '';
+    if (!newDateRange) return '';
+    const relevantParent = dateChangeTarget === 'subtask' ? task : parentTask;
+    if (!relevantParent) return '';
 
-    const parentFrom = parentTask.dateRange?.from ? startOfDay(new Date(parentTask.dateRange.from)) : null;
-    const parentTo = parentTask.dateRange?.to ? startOfDay(new Date(parentTask.dateRange.to)) : null;
+    const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
+    const parentTo = relevantParent.dateRange?.to ? startOfDay(new Date(relevantParent.dateRange.to)) : null;
     const rangeFrom = newDateRange.from ? startOfDay(new Date(newDateRange.from)) : null;
     const rangeTo = newDateRange.to ? startOfDay(new Date(newDateRange.to)) : null;
 
@@ -338,7 +358,7 @@ export function TaskItem({
               ))}
             </div>
 
-            <Popover>
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant={'outline'}

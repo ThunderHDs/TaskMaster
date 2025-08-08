@@ -155,8 +155,10 @@ export default function TaskPage() {
       const randomIcon = icons[Math.floor(Math.random() * icons.length)];
       
       let finalDateRange = newTaskDateRange;
-      if (!finalDateRange?.from && !finalDateRange?.to) {
-          finalDateRange = { from: new Date() };
+      if (newTaskDateRange && !newTaskDateRange.from && newTaskDateRange.to) {
+        finalDateRange = { from: new Date(), to: newTaskDateRange.to };
+      } else if (!newTaskDateRange) {
+        finalDateRange = { from: new Date() };
       }
 
       const newTask: Task = {
@@ -197,43 +199,43 @@ export default function TaskPage() {
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
     const toggleChildren = (tasks: Task[], parentCompleted: boolean): Task[] => {
-      return tasks.map(task => ({
-        ...task,
-        completed: parentCompleted,
-        subtasks: toggleChildren(task.subtasks || [], parentCompleted),
-      }));
-    };
-  
-    const updateParents = (tasks: Task[]): Task[] => {
-      return tasks.map(task => {
-        if (task.subtasks && task.subtasks.length > 0) {
-          const newSubtasks = updateParents(task.subtasks);
-          const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
-          return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
-        }
-        return task;
-      });
-    };
-  
-    const updateTasks = (tasks: Task[], targetId: string): Task[] => {
-      return tasks.map(task => {
-        if (task.id === targetId) {
-          return {
+        return tasks.map(task => ({
             ...task,
-            completed: completed,
-            subtasks: toggleChildren(task.subtasks || [], completed),
-          };
-        }
-        if (task.subtasks && task.subtasks.length > 0) {
-          return { ...task, subtasks: updateTasks(task.subtasks, targetId) };
-        }
-        return task;
-      });
+            completed: parentCompleted,
+            subtasks: task.subtasks ? toggleChildren(task.subtasks, parentCompleted) : [],
+        }));
     };
-  
+
+    const updateParents = (tasks: Task[]): Task[] => {
+        return tasks.map(task => {
+            if (task.subtasks && task.subtasks.length > 0) {
+                const newSubtasks = updateParents(task.subtasks);
+                const allChildrenCompleted = newSubtasks.every(sub => sub.completed);
+                return { ...task, subtasks: newSubtasks, completed: allChildrenCompleted };
+            }
+            return task;
+        });
+    };
+
+    const updateTasks = (tasks: Task[], targetId: string, isCompleted: boolean): Task[] => {
+        return tasks.map(task => {
+            if (task.id === targetId) {
+                const updatedTask = { ...task, completed: isCompleted };
+                if (updatedTask.subtasks) {
+                    updatedTask.subtasks = toggleChildren(updatedTask.subtasks, isCompleted);
+                }
+                return updatedTask;
+            }
+            if (task.subtasks && task.subtasks.length > 0) {
+                return { ...task, subtasks: updateTasks(task.subtasks, targetId, isCompleted) };
+            }
+            return task;
+        });
+    };
+
     setTasks(currentTasks => {
-      const tasksWithToggledItem = updateTasks(currentTasks, id);
-      return updateParents(tasksWithToggledItem);
+        const tasksWithToggledItem = updateTasks(currentTasks, id, completed);
+        return updateParents(tasksWithToggledItem);
     });
   }, []);
 
@@ -250,7 +252,7 @@ export default function TaskPage() {
     toast({ title: "Task deleted.", variant: "destructive" });
   }, [toast]);
   
-  const handleAddSubtask = useCallback((parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>) => {
+  const handleAddSubtask = useCallback((parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => {
     const randomIcon = icons[Math.floor(Math.random() * icons.length)];
     const newSubtask: Task = {
         ...subtaskData,
@@ -258,8 +260,13 @@ export default function TaskPage() {
         icon: randomIcon,
         subtasks: [],
     };
+
+    if (parentUpdate) {
+        handleUpdate(parentId, parentUpdate);
+    }
+    
     setTasks(prev => updateTaskRecursively(prev, parentId, task => ({ ...task, subtasks: [...task.subtasks, newSubtask], completed: false })));
-  }, []);
+  }, [handleUpdate]);
 
   const filteredAndSortedTasks = useMemo(() => {
     let filteredTasks = tasks;
@@ -337,7 +344,7 @@ export default function TaskPage() {
                                     ) : newTaskDateRange?.to ? (
                                         `By ${format(newTaskDateRange.to, 'LLL dd, y')}`
                                     ) : (
-                                        <span>Pick a date range</span>
+                                        <span>Pick a date</span>
                                     )}
                                 </Button>
                             </PopoverTrigger>
@@ -429,68 +436,61 @@ export default function TaskPage() {
                                     />
                                     <Button onClick={handleAddTag}>Add</Button>
                                 </div>
-                                <Command>
-                                  <CommandInput 
-                                    placeholder="Filter tags..."
-                                    value={tagFilter}
-                                    onValueChange={setTagFilter}
-                                  />
-                                  <ScrollArea className="h-40">
-                                    <CommandList>
-                                        <CommandEmpty>No tags found.</CommandEmpty>
-                                        <CommandGroup>
-                                        {filteredTags.map(tag => (
-                                          <div
-                                            key={tag.id}
-                                            className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
-                                          >
-                                            <div className="flex items-center gap-2 flex-grow" onClick={() => setEditingTag({ ...tag })}>
-                                              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
-                                              <span className="text-sm">{tag.label}</span>
-                                            </div>
-                                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingTag({ ...tag });
-                                                }}
+                                 <div className="space-y-2">
+                                    <Label>Existing Tags</Label>
+                                    <ScrollArea className="h-40">
+                                      <div className="space-y-1 pr-2">
+                                          {tags.map(tag => (
+                                              <div
+                                                  key={tag.id}
+                                                  className="flex justify-between items-center w-full p-2 hover:bg-accent rounded-md group"
                                               >
-                                                <Edit className="h-4 w-4" />
-                                              </Button>
-                                              <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 text-destructive hover:text-destructive"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                  >
-                                                    <X className="h-4 w-4" />
-                                                  </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                  <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                      This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
-                                                    </AlertDialogDescription>
-                                                  </AlertDialogHeader>
-                                                  <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
-                                                  </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                              </AlertDialog>
-                                            </div>
-                                          </div>
-                                        ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                  </ScrollArea>
-                                </Command>
+                                                  <div className="flex items-center gap-2 flex-grow">
+                                                      <div className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
+                                                      <span className="text-sm">{tag.label}</span>
+                                                  </div>
+                                                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                      <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="h-6 w-6"
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              setEditingTag({ ...tag });
+                                                          }}
+                                                      >
+                                                          <Edit className="h-4 w-4" />
+                                                      </Button>
+                                                      <AlertDialog>
+                                                          <AlertDialogTrigger asChild>
+                                                              <Button
+                                                                  variant="ghost"
+                                                                  size="icon"
+                                                                  className="h-6 w-6 text-destructive hover:text-destructive"
+                                                                  onClick={(e) => e.stopPropagation()}
+                                                              >
+                                                                  <X className="h-4 w-4" />
+                                                              </Button>
+                                                          </AlertDialogTrigger>
+                                                          <AlertDialogContent>
+                                                              <AlertDialogHeader>
+                                                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                  <AlertDialogDescription>
+                                                                      This will permanently delete the tag &quot;{tag.label}&quot; and remove it from all tasks.
+                                                                  </AlertDialogDescription>
+                                                              </AlertDialogHeader>
+                                                              <AlertDialogFooter>
+                                                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                  <AlertDialogAction onClick={() => handleDeleteTag(tag.id)}>Delete</AlertDialogAction>
+                                                              </AlertDialogFooter>
+                                                          </AlertDialogContent>
+                                                      </AlertDialog>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                    </ScrollArea>
+                                 </div>
                             </div>
                         </PopoverContent>
                     </Popover>
@@ -558,7 +558,11 @@ export default function TaskPage() {
                                 value={editingTag.color} 
                                 onChange={(e) => {
                                     const newColor = e.target.value;
-                                    setEditingTag({...editingTag, color: newColor});
+                                    if (/^#[0-9A-F]{6}$/i.test(newColor)) {
+                                      setEditingTag({...editingTag, color: newColor});
+                                    } else {
+                                      setEditingTag({...editingTag, color: e.target.value});
+                                    }
                                  }}
                                 className="flex-1"
                             />
