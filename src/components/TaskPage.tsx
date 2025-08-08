@@ -163,28 +163,54 @@ export default function TaskPage() {
   }, []);
 
   const handleToggleComplete = useCallback((id: string, completed: boolean) => {
-    const toggleRecursively = (tasks: Task[], parentCompleted: boolean): Task[] => {
+    const checkParentCompletion = (tasks: Task[]): Task[] => {
       return tasks.map(task => {
-        const currentCompleted = parentCompleted || completed;
-        return {
-          ...task,
-          completed: currentCompleted,
-          subtasks: toggleRecursively(task.subtasks, currentCompleted)
-        };
+        if (task.subtasks && task.subtasks.length > 0) {
+          const updatedSubtasks = checkParentCompletion(task.subtasks);
+          const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
+          return {
+            ...task,
+            subtasks: updatedSubtasks,
+            completed: allSubtasksCompleted,
+          };
+        }
+        return task;
       });
     };
-    
-    setTasks(prev => updateTaskRecursively(prev, id, task => {
-      const newCompleted = completed;
-      const updatedSubtasks = toggleRecursively(task.subtasks, newCompleted);
-      const allSubtasksCompleted = updatedSubtasks.every(st => st.completed);
-      
-      return { 
-        ...task,
-        completed: newCompleted || (updatedSubtasks.length > 0 && allSubtasksCompleted),
-        subtasks: updatedSubtasks
-      };
-    }));
+
+    const toggleAndUpdate = (tasks: Task[]): Task[] => {
+      // First, toggle the specified task and its children
+      let toggled = false;
+      const newTasks = tasks.map(task => {
+        if (task.id === id) {
+          toggled = true;
+          const toggleChildren = (t: Task, c: boolean): Task => ({
+            ...t,
+            completed: c,
+            subtasks: t.subtasks.map(st => toggleChildren(st, c))
+          });
+          return toggleChildren(task, completed);
+        }
+        if (task.subtasks && task.subtasks.length > 0) {
+          const { tasks: updatedSubtasks, toggled: subToggled } = (()=>{
+            const res = toggleAndUpdate(task.subtasks);
+            let toggled = false;
+            if(res.some((t,i) => t.completed !== task.subtasks[i].completed)) toggled = true;
+            return {tasks: res, toggled}
+          })();
+          if (subToggled) toggled = true;
+          return { ...task, subtasks: updatedSubtasks };
+        }
+        return task;
+      });
+
+      if (!toggled) return tasks;
+
+      // After toggling, re-evaluate parent completion status from the root
+      return checkParentCompletion(newTasks);
+    };
+
+    setTasks(prevTasks => toggleAndUpdate(prevTasks));
   }, []);
 
   const handleDelete = useCallback((id: string) => {
