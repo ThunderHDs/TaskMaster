@@ -11,6 +11,7 @@ export type Activity = {
   type: 'comment' | 'log';
   content: string;
   timestamp: Date | string;
+  taskId: string;
 };
 
 export type Task = {

@@ -46,6 +46,7 @@ import {
 } from './ui/alert-dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
 type TaskItemProps = {
   task: Task;
@@ -55,6 +56,8 @@ type TaskItemProps = {
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => void;
   onAddComment: (taskId: string, comment: string) => void;
+  onToggleActivity: (taskId: string) => void;
+  isActivityOpen: boolean;
   parentTask?: Task;
   level?: number;
 };
@@ -67,6 +70,8 @@ export function TaskItem({
   onDelete,
   onAddSubtask,
   onAddComment,
+  onToggleActivity,
+  isActivityOpen,
   parentTask,
   level = 0,
 }: TaskItemProps) {
@@ -102,17 +107,17 @@ export function TaskItem({
   };
 
   const handleDateSelection = (range: DateRange | undefined, target: 'task' | 'subtask') => {
-    handleDateChange(range, target);
     if (target === 'task') {
+        handleDateChange(range, target);
         setEditedTask({ ...editedTask, dateRange: range });
     } else {
+        handleDateChange(range, target);
         setNewSubtaskDateRange(range);
     }
   };
 
   const handleDateChange = (range: DateRange | undefined, target: 'task' | 'subtask') => {
     setDateChangeTarget(target);
-    setStagedParentUpdate(null);
 
     const relevantParent = target === 'subtask' ? task : parentTask;
 
@@ -136,7 +141,6 @@ export function TaskItem({
     if (startConflict || endConflict) {
       setNewDateRange(range);
       setShowDateWarning(true);
-      setIsDatePickerOpen(false);
     } else {
       if (target === 'task') {
         setEditedTask({ ...editedTask, dateRange: range });
@@ -151,7 +155,7 @@ export function TaskItem({
   
     if (newDateRange && relevantParent) {
       const parentUpdate: Partial<Task> = {
-        dateRange: { ...relevantParent.dateRange },
+        dateRange: { from: relevantParent.dateRange?.from, to: relevantParent.dateRange?.to },
       };
   
       const parentFrom = relevantParent.dateRange?.from ? startOfDay(new Date(relevantParent.dateRange.from)) : null;
@@ -177,7 +181,6 @@ export function TaskItem({
   
     setShowDateWarning(false);
     setNewDateRange(undefined);
-    setIsDatePickerOpen(true);
   };
 
   const cancelDateChange = () => {
@@ -185,7 +188,6 @@ export function TaskItem({
     setNewDateRange(undefined);
     setDateChangeTarget(null);
     setStagedParentUpdate(null);
-    setIsDatePickerOpen(true);
   };
 
   const handleSave = () => {
@@ -281,6 +283,25 @@ export function TaskItem({
       : [...(editedTask.tags || []), tagId];
     setEditedTask({ ...editedTask, tags: newTags });
   };
+  
+  const getTaskById = (tasks: Task[], id: string): Task | undefined => {
+    for (const t of tasks) {
+      if (t.id === id) return t;
+      if (t.subtasks) {
+        const found = getTaskById(t.subtasks, id);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  };
+  
+  const findRootTask = (currentTask: Task): Task => {
+    let root = currentTask;
+    // This is a simplified search, assuming a flat top-level `tasks` array exists in a reachable scope.
+    // A more robust solution might need context or prop drilling for the full task tree.
+    // For now, we'll assume we can't traverse up, and activity is on the immediate task.
+    return root; 
+  }
 
   const progress = calculateProgress();
   const TaskIcon = task.icon;
@@ -330,6 +351,7 @@ export function TaskItem({
 
   return (
     <Card className={cn('w-full transition-all duration-300', task.completed ? 'bg-muted/50' : 'bg-card')}>
+     <Collapsible open={isActivityOpen} onOpenChange={() => onToggleActivity(task.id)}>
       <div className="p-3 sm:p-4 flex flex-col gap-2">
         {isEditing ? (
           <div className="flex flex-col gap-3">
@@ -414,7 +436,7 @@ export function TaskItem({
                         }
                       : undefined
                   }
-                  onSelect={range => handleDateChange(range, 'task')}
+                  onSelect={range => handleDateSelection(range, 'task')}
                   numberOfMonths={2}
                 />
               </PopoverContent>
@@ -461,6 +483,11 @@ export function TaskItem({
                       {dueDateString}
                     </span>
                   )}
+                   <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
                   <TaskIcon className="h-4 w-4 text-muted-foreground" />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -542,6 +569,8 @@ export function TaskItem({
                     onDelete={onDelete}
                     onAddSubtask={onAddSubtask}
                     onAddComment={onAddComment}
+                    onToggleActivity={onToggleActivity}
+                    isActivityOpen={isActivityOpen}
                     parentTask={task}
                     level={level + 1}
                   />
@@ -671,52 +700,54 @@ export function TaskItem({
         )}
       </div>
 
-      <Separator />
-
-      <div className="p-3 sm:p-4">
-        <h4 className="text-sm font-semibold mb-3 flex items-center">
-            <History className="h-4 w-4 mr-2" />
-            Activity
-        </h4>
-        <div className="space-y-4 mb-4">
-            <div className="flex gap-3">
-                <Input 
-                    placeholder="Add a comment..."
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
-                />
-                <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()}>
-                    <Send className="h-4 w-4" />
-                </Button>
-            </div>
-
-            <ScrollArea className="h-40 pr-4">
-                <div className="space-y-4">
-                    {task.activity?.map(item => (
-                        <div key={item.id} className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-1">
-                                {item.type === 'comment' ? (
-                                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                                ) : (
-                                    <History className="h-4 w-4 text-muted-foreground" />
-                                )}
-                            </div>
-                            <div className="flex-grow">
-                                <p className="text-sm">{item.content}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
-                                </p>
-                            </div>
-                        </div>
-                    ))}
-                    {(!task.activity || task.activity.length === 0) && (
-                        <p className="text-sm text-muted-foreground text-center py-4">No activity yet.</p>
-                    )}
+      <CollapsibleContent>
+        <Separator />
+        <div className="p-3 sm:p-4 bg-muted/20">
+            <h4 className="text-sm font-semibold mb-3 flex items-center text-muted-foreground">
+                <History className="h-4 w-4 mr-2" />
+                Activity
+            </h4>
+            <div className="space-y-4 mb-4">
+                <div className="flex gap-3">
+                    <Input 
+                        placeholder="Add a comment..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                    />
+                    <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()}>
+                        <Send className="h-4 w-4" />
+                    </Button>
                 </div>
-            </ScrollArea>
+
+                <ScrollArea className="h-40 pr-4">
+                    <div className="space-y-4">
+                        {task.activity?.map(item => (
+                            <div key={item.id} className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-1">
+                                    {item.type === 'comment' ? (
+                                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                                    ) : (
+                                        <History className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                </div>
+                                <div className="flex-grow">
+                                    <p className="text-sm">{item.content}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                        {(!task.activity || task.activity.length === 0) && (
+                            <p className="text-sm text-muted-foreground text-center py-4">No activity yet.</p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </div>
         </div>
-      </div>
+      </CollapsibleContent>
+    </Collapsible>
       
       {editedTask.description && (
         <SuggestSubtasksDialog
