@@ -17,7 +17,7 @@ import { Calendar } from './ui/calendar';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 
@@ -59,7 +59,7 @@ export default function TaskPage() {
         description: 'Buy ingredients for this week\'s meals.',
         completed: false,
         icon: ShoppingBasket,
-        dateRange: { from: new Date(), to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
+        dateRange: { to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3) },
         tags: ['tag-4'],
         activity: [{ id: crypto.randomUUID(), type: 'log', content: 'Task created.', timestamp: new Date() }],
         subtasks: [],
@@ -291,8 +291,13 @@ export default function TaskPage() {
   
   const handleAddSubtask = useCallback((parentId: string, subtaskData: Omit<Task, 'id' | 'subtasks'>, parentUpdate?: Partial<Task>) => {
     const randomIcon = icons[Math.floor(Math.random() * icons.length)];
+    let finalSubtaskData = { ...subtaskData };
+    if (finalSubtaskData.dateRange?.to && !finalSubtaskData.dateRange.from) {
+        finalSubtaskData.dateRange.from = new Date();
+    }
+    
     const newSubtask: Task = {
-        ...subtaskData,
+        ...finalSubtaskData,
         id: crypto.randomUUID(),
         icon: randomIcon,
         subtasks: [],
